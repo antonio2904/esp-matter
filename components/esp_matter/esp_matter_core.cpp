@@ -37,15 +37,11 @@
 #include <platform/CHIPDeviceLayer.h>
 #include <platform/DeviceInfoProvider.h>
 #include <platform/DiagnosticDataProvider.h>
-#include <platform/ESP32/ESP32DeviceInfoProvider.h>
-#include <platform/ESP32/ESP32FactoryDataProvider.h>
+#include <platform/ESP32/ESP32Utils.h>
 #include <platform/ESP32/NetworkCommissioningDriver.h>
-#if CHIP_DEVICE_CONFIG_ENABLE_THREAD
-#include <esp_matter_openthread.h>
-#endif
 #include <esp_matter_ota.h>
-#include <esp_route_hook.h>
-#include <esp_matter_dac_provider.h>
+#include <esp_matter_mem.h>
+#include <esp_matter_providers.h>
 
 using chip::CommandId;
 using chip::DataVersion;
@@ -75,13 +71,6 @@ static bool esp_matter_started = false;
 namespace esp_matter {
 
 namespace {
-#if CONFIG_ENABLE_ESP32_FACTORY_DATA_PROVIDER
-chip::DeviceLayer::ESP32FactoryDataProvider factory_data_provider;
-#endif // CONFIG_ENABLE_ESP32_FACTORY_DATA_PROVIDER
-
-#if CONFIG_ENABLE_ESP32_DEVICE_INFO_PROVIDER
-chip::DeviceLayer::ESP32DeviceInfoProvider device_info_provider;
-#endif
 
 void PostEvent(uint16_t eventType)
 {
@@ -90,7 +79,7 @@ void PostEvent(uint16_t eventType)
     CHIP_ERROR error = chip::DeviceLayer::PlatformMgr().PostEvent(&event);
     if (error != CHIP_NO_ERROR)
     {
-        ESP_LOGE(TAG, "Failed to post event for event type:%u, err:%" CHIP_ERROR_FORMAT, eventType, error.Format());
+        ESP_LOGE(TAG, "Failed to post event for event type:%" PRIu16 ", err:%" CHIP_ERROR_FORMAT, eventType, error.Format());
     }
 }
 
@@ -298,19 +287,19 @@ static esp_err_t free_default_value(attribute_t *attribute)
     if (current_attribute->flags & ATTRIBUTE_FLAG_MIN_MAX) {
         if (current_attribute->default_value_size > 2) {
             if (current_attribute->default_value.ptrToMinMaxValue->defaultValue.ptrToDefaultValue) {
-                free((void *)current_attribute->default_value.ptrToMinMaxValue->defaultValue.ptrToDefaultValue);
+                esp_matter_mem_free((void *)current_attribute->default_value.ptrToMinMaxValue->defaultValue.ptrToDefaultValue);
             }
             if (current_attribute->default_value.ptrToMinMaxValue->minValue.ptrToDefaultValue) {
-                free((void *)current_attribute->default_value.ptrToMinMaxValue->minValue.ptrToDefaultValue);
+                esp_matter_mem_free((void *)current_attribute->default_value.ptrToMinMaxValue->minValue.ptrToDefaultValue);
             }
             if (current_attribute->default_value.ptrToMinMaxValue->maxValue.ptrToDefaultValue) {
-                free((void *)current_attribute->default_value.ptrToMinMaxValue->maxValue.ptrToDefaultValue);
+                esp_matter_mem_free((void *)current_attribute->default_value.ptrToMinMaxValue->maxValue.ptrToDefaultValue);
             }
         }
-        free((void *)current_attribute->default_value.ptrToMinMaxValue);
+        esp_matter_mem_free((void *)current_attribute->default_value.ptrToMinMaxValue);
     } else if (current_attribute->default_value_size > 2) {
         if (current_attribute->default_value.ptrToDefaultValue) {
-            free((void *)current_attribute->default_value.ptrToDefaultValue);
+            esp_matter_mem_free((void *)current_attribute->default_value.ptrToDefaultValue);
         }
     }
     return ESP_OK;
@@ -321,7 +310,7 @@ static EmberAfDefaultAttributeValue get_default_value_from_data(esp_matter_attr_
                                                                 uint16_t attribute_size)
 {
     EmberAfDefaultAttributeValue default_value = (uint16_t)0;
-    uint8_t *value = (uint8_t *)calloc(1, attribute_size);
+    uint8_t *value = (uint8_t *)esp_matter_mem_calloc(1, attribute_size);
     if (!value) {
         ESP_LOGE(TAG, "Could not allocate value buffer for default value");
         return default_value;
@@ -341,7 +330,7 @@ static EmberAfDefaultAttributeValue get_default_value_from_data(esp_matter_attr_
             int_value = (uint16_t)*value;
         }
         default_value = int_value;
-        free(value);
+        esp_matter_mem_free(value);
     }
     return default_value;
 }
@@ -362,7 +351,7 @@ static esp_err_t set_default_value_from_current_val(attribute_t *attribute)
 
     /* Get and set value */
     if (current_attribute->flags & ATTRIBUTE_FLAG_MIN_MAX) {
-        EmberAfAttributeMinMaxValue *temp_value = (EmberAfAttributeMinMaxValue *)calloc(1,
+        EmberAfAttributeMinMaxValue *temp_value = (EmberAfAttributeMinMaxValue *)esp_matter_mem_calloc(1,
                                                                                 sizeof(EmberAfAttributeMinMaxValue));
         if (!temp_value) {
             ESP_LOGE(TAG, "Could not allocate ptrToMinMaxValue for default value");
@@ -404,7 +393,7 @@ static esp_err_t erase_persistent_data(endpoint_t *endpoint)
 {
     uint16_t endpoint_id = endpoint::get_id(endpoint);
     char nvs_namespace[16] = {0};
-    snprintf(nvs_namespace, 16, "endpoint_%X", endpoint_id); /* endpoint_id */
+    snprintf(nvs_namespace, 16, "endpoint_%" PRIX16 "", endpoint_id); /* endpoint_id */
 
     nvs_handle_t handle;
     esp_err_t err = nvs_open_from_partition(ESP_MATTER_NVS_PART_NAME, nvs_namespace, NVS_READWRITE, &handle);
@@ -449,7 +438,7 @@ static esp_err_t disable(endpoint_t *endpoint)
         lock::chip_stack_unlock();
     }
     if (!(current_endpoint->endpoint_type)) {
-        ESP_LOGE(TAG, "endpoint %d's endpoint_type is NULL", current_endpoint->endpoint_id);
+        ESP_LOGE(TAG, "endpoint %" PRIu16 "'s endpoint_type is NULL", current_endpoint->endpoint_id);
         return ESP_ERR_INVALID_STATE;
     }
     /* Free all clusters */
@@ -457,31 +446,31 @@ static esp_err_t disable(endpoint_t *endpoint)
     int cluster_count = endpoint_type->clusterCount;
     for (int cluster_index = 0; cluster_index < cluster_count; cluster_index++) {
         /* Free attributes */
-        free((void *)endpoint_type->cluster[cluster_index].attributes);
+        esp_matter_mem_free((void *)endpoint_type->cluster[cluster_index].attributes);
         /* Free commands */
         if (endpoint_type->cluster[cluster_index].acceptedCommandList) {
-            free((void *)endpoint_type->cluster[cluster_index].acceptedCommandList);
+            esp_matter_mem_free((void *)endpoint_type->cluster[cluster_index].acceptedCommandList);
         }
         if (endpoint_type->cluster[cluster_index].generatedCommandList) {
-            free((void *)endpoint_type->cluster[cluster_index].generatedCommandList);
+            esp_matter_mem_free((void *)endpoint_type->cluster[cluster_index].generatedCommandList);
         }
     }
-    free((void *)endpoint_type->cluster);
+    esp_matter_mem_free((void *)endpoint_type->cluster);
 
     /* Free data versions */
     if (current_endpoint->data_versions_ptr) {
-        free(current_endpoint->data_versions_ptr);
+        esp_matter_mem_free(current_endpoint->data_versions_ptr);
         current_endpoint->data_versions_ptr = NULL;
     }
 
     /* Free device types */
     if (current_endpoint->device_types_ptr) {
-        free(current_endpoint->device_types_ptr);
+        esp_matter_mem_free(current_endpoint->device_types_ptr);
         current_endpoint->device_types_ptr = NULL;
     }
 
     /* Free endpoint type */
-    free(endpoint_type);
+    esp_matter_mem_free(endpoint_type);
     current_endpoint->endpoint_type = NULL;
 
     /* Clear endpoint persistent data in nvs flash */
@@ -497,7 +486,7 @@ esp_err_t enable(endpoint_t *endpoint)
     _endpoint_t *current_endpoint = (_endpoint_t *)endpoint;
 
     /* Endpoint Type */
-    EmberAfEndpointType *endpoint_type = (EmberAfEndpointType *)calloc(1, sizeof(EmberAfEndpointType));
+    EmberAfEndpointType *endpoint_type = (EmberAfEndpointType *)esp_matter_mem_calloc(1, sizeof(EmberAfEndpointType));
     if (!endpoint_type) {
         ESP_LOGE(TAG, "Couldn't allocate endpoint_type");
         /* goto cleanup is not used here to avoid 'crosses initialization' of data_versions below */
@@ -506,10 +495,10 @@ esp_err_t enable(endpoint_t *endpoint)
     current_endpoint->endpoint_type = endpoint_type;
 
     /* Device types */
-    EmberAfDeviceType *device_types_ptr = (EmberAfDeviceType *)calloc(current_endpoint->device_type_count, sizeof(EmberAfDeviceType));
+    EmberAfDeviceType *device_types_ptr = (EmberAfDeviceType *)esp_matter_mem_calloc(current_endpoint->device_type_count, sizeof(EmberAfDeviceType));
     if (!device_types_ptr) {
         ESP_LOGE(TAG, "Couldn't allocate device_types");
-        free(endpoint_type);
+        esp_matter_mem_free(endpoint_type);
         current_endpoint->endpoint_type = NULL;
         /* goto cleanup is not used here to avoid 'crosses initialization' of device_types below */
         return ESP_ERR_NO_MEM;
@@ -526,11 +515,11 @@ esp_err_t enable(endpoint_t *endpoint)
     int cluster_count = cluster::get_count(cluster);
     int cluster_index = 0;
 
-    DataVersion *data_versions_ptr = (DataVersion *)calloc(1, cluster_count * sizeof(DataVersion));
+    DataVersion *data_versions_ptr = (DataVersion *)esp_matter_mem_calloc(1, cluster_count * sizeof(DataVersion));
     if (!data_versions_ptr) {
         ESP_LOGE(TAG, "Couldn't allocate data_versions");
-        free(data_versions_ptr);
-        free(endpoint_type);
+        esp_matter_mem_free(data_versions_ptr);
+        esp_matter_mem_free(endpoint_type);
         current_endpoint->data_versions_ptr = NULL;
         current_endpoint->endpoint_type = NULL;
         /* goto cleanup is not used here to avoid 'crosses initialization' of data_versions below */
@@ -557,7 +546,7 @@ esp_err_t enable(endpoint_t *endpoint)
     int command_flag = COMMAND_FLAG_NONE;
     int endpoint_index = 0;
 
-    matter_clusters = (EmberAfCluster *)calloc(1, cluster_count * sizeof(EmberAfCluster));
+    matter_clusters = (EmberAfCluster *)esp_matter_mem_calloc(1, cluster_count * sizeof(EmberAfCluster));
     if (!matter_clusters) {
         ESP_LOGE(TAG, "Couldn't allocate matter_clusters");
         err = ESP_ERR_NO_MEM;
@@ -569,7 +558,7 @@ esp_err_t enable(endpoint_t *endpoint)
         attribute = cluster->attribute_list;
         attribute_count = attribute::get_count(attribute);
         attribute_index = 0;
-        matter_attributes = (EmberAfAttributeMetadata *)calloc(1, attribute_count * sizeof(EmberAfAttributeMetadata));
+        matter_attributes = (EmberAfAttributeMetadata *)esp_matter_mem_calloc(1, attribute_count * sizeof(EmberAfAttributeMetadata));
         if (!matter_attributes) {
             if (attribute_count != 0) {
                 ESP_LOGE(TAG, "Couldn't allocate matter_attributes");
@@ -604,7 +593,7 @@ esp_err_t enable(endpoint_t *endpoint)
         command_count = command::get_count(command, command_flag);
         if (command_count > 0) {
             command_index = 0;
-            accepted_command_ids = (CommandId *)calloc(1, (command_count + 1) * sizeof(CommandId));
+            accepted_command_ids = (CommandId *)esp_matter_mem_calloc(1, (command_count + 1) * sizeof(CommandId));
             if (!accepted_command_ids) {
                 ESP_LOGE(TAG, "Couldn't allocate accepted_command_ids");
                 err = ESP_ERR_NO_MEM;
@@ -626,7 +615,7 @@ esp_err_t enable(endpoint_t *endpoint)
         command_count = command::get_count(command, command_flag);
         if (command_count > 0) {
             command_index = 0;
-            generated_command_ids = (CommandId *)calloc(1, (command_count + 1) * sizeof(CommandId));
+            generated_command_ids = (CommandId *)esp_matter_mem_calloc(1, (command_count + 1) * sizeof(CommandId));
             if (!generated_command_ids) {
                 ESP_LOGE(TAG, "Couldn't allocate generated_command_ids");
                 err = ESP_ERR_NO_MEM;
@@ -680,7 +669,7 @@ esp_err_t enable(endpoint_t *endpoint)
     status = emberAfSetDynamicEndpoint(endpoint_index, current_endpoint->endpoint_id, endpoint_type, data_versions,
                                        device_types, current_endpoint->parent_endpoint_id);
     if (status != EMBER_ZCL_STATUS_SUCCESS) {
-        ESP_LOGE(TAG, "Error adding dynamic endpoint %d: 0x%x", current_endpoint->endpoint_id, status);
+        ESP_LOGE(TAG, "Error adding dynamic endpoint %" PRIu16 ": 0x%x", current_endpoint->endpoint_id, status);
         err = ESP_FAIL;
         if (lock_status == lock::SUCCESS) {
             lock::chip_stack_unlock();
@@ -690,45 +679,45 @@ esp_err_t enable(endpoint_t *endpoint)
     if (lock_status == lock::SUCCESS) {
         lock::chip_stack_unlock();
     }
-    ESP_LOGI(TAG, "Dynamic endpoint %d added", current_endpoint->endpoint_id);
+    ESP_LOGI(TAG, "Dynamic endpoint %" PRIu16 " added", current_endpoint->endpoint_id);
     return err;
 
 cleanup:
     if (generated_command_ids) {
-        free(generated_command_ids);
+        esp_matter_mem_free(generated_command_ids);
     }
     if (accepted_command_ids) {
-        free(accepted_command_ids);
+        esp_matter_mem_free(accepted_command_ids);
     }
     if (matter_attributes) {
-        free(matter_attributes);
+        esp_matter_mem_free(matter_attributes);
     }
     if (matter_clusters) {
         for (int cluster_index = 0; cluster_index < cluster_count; cluster_index++) {
             /* Free attributes */
             if (matter_clusters[cluster_index].attributes) {
-                free((void *)matter_clusters[cluster_index].attributes);
+                esp_matter_mem_free((void *)matter_clusters[cluster_index].attributes);
             }
             /* Free commands */
             if (matter_clusters[cluster_index].acceptedCommandList) {
-                free((void *)matter_clusters[cluster_index].acceptedCommandList);
+                esp_matter_mem_free((void *)matter_clusters[cluster_index].acceptedCommandList);
             }
             if (matter_clusters[cluster_index].generatedCommandList) {
-                free((void *)matter_clusters[cluster_index].generatedCommandList);
+                esp_matter_mem_free((void *)matter_clusters[cluster_index].generatedCommandList);
             }
         }
-        free(matter_clusters);
+        esp_matter_mem_free(matter_clusters);
     }
     if (data_versions_ptr) {
-        free(data_versions_ptr);
+        esp_matter_mem_free(data_versions_ptr);
         current_endpoint->data_versions_ptr = NULL;
     }
     if (device_types_ptr) {
-        free(device_types_ptr);
+        esp_matter_mem_free(device_types_ptr);
         current_endpoint->device_types_ptr = NULL;
     }
     if (endpoint_type) {
-        free(endpoint_type);
+        esp_matter_mem_free(endpoint_type);
         current_endpoint->endpoint_type = NULL;
     }
     return err;
@@ -816,7 +805,7 @@ static void esp_matter_chip_init_task(intptr_t context)
     // Record start up event in basic information cluster.
     PlatformMgr().HandleServerStarted();
     // Record boot reason evnet in general diagnostics cluster.
-    chip::app::Clusters::GeneralDiagnostics::BootReasonType bootReason;
+    chip::app::Clusters::GeneralDiagnostics::BootReasonEnum bootReason;
     if (GetDiagnosticDataProvider().GetBootReason(bootReason) == CHIP_NO_ERROR) {
         chip::app::Clusters::GeneralDiagnosticsServer::Instance().OnDeviceReboot(bootReason);
     }
@@ -827,6 +816,13 @@ static void esp_matter_chip_init_task(intptr_t context)
         sWiFiNetworkCommissioningInstance.Init();
     }
 #endif
+#if CHIP_DEVICE_CONFIG_ENABLE_ETHERNET
+    {
+        static chip::app::Clusters::NetworkCommissioning::Instance sEthernetNetworkCommissioningInstance(0,
+                                            &(chip::DeviceLayer::NetworkCommissioning::ESPEthernetDriver::GetInstance()));
+        sEthernetNetworkCommissioningInstance.Init();
+    }
+#endif
     xTaskNotifyGive(task_to_notify);
 }
 
@@ -835,63 +831,61 @@ static void device_callback_internal(const ChipDeviceEvent * event, intptr_t arg
     switch (event->Type)
     {
     case chip::DeviceLayer::DeviceEventType::kInterfaceIpAddressChanged:
-#if !CHIP_DEVICE_CONFIG_ENABLE_THREAD
+#if CHIP_DEVICE_CONFIG_ENABLE_WIFI
         if (event->InterfaceIpAddressChanged.Type == chip::DeviceLayer::InterfaceIpChangeType::kIpV6_Assigned ||
                 event->InterfaceIpAddressChanged.Type == chip::DeviceLayer::InterfaceIpChangeType::kIpV4_Assigned) {
             chip::app::DnssdServer::Instance().StartServer();
-            esp_route_hook_init(esp_netif_get_handle_from_ifkey("WIFI_STA_DEF"));
         }
 #endif
-        if (event->InterfaceIpAddressChanged.Type == chip::DeviceLayer::InterfaceIpChangeType::kIpV6_Assigned) {
-            // When the OTA image is applied, the device will reboot and send the NotifyUpdateApplied to the Provider
-            // in esp_matter_ota_requestor_start(), so the device should be connected to the Wi-Fi network when calling
-            // esp_matter_ota_requestor_start(). IPv4 might be disabled on the Provider so we should call this function
-            // when the IPv6 address is assigned.
-            esp_matter_ota_requestor_start();
-            /* Initialize binding manager */
-            client::binding_manager_init();
-        }
         break;
 
-#if CHIP_DEVICE_CONFIG_ENABLE_THREAD
-    case chip::DeviceLayer::DeviceEventType::kThreadConnectivityChange:
-        if (event->ThreadConnectivityChange.Result == chip::DeviceLayer::ConnectivityChange::kConnectivity_Established) {
-            esp_matter_ota_requestor_start();
-            /* Initialize binding manager */
-            client::binding_manager_init();
-        }
+    case chip::DeviceLayer::DeviceEventType::kDnssdInitialized:
+        // Wait some time to avoid issue https://github.com/project-chip/connectedhomeip/issues/25570
+        chip::DeviceLayer::SystemLayer().StartTimer(chip::System::Clock::Seconds16(2),
+                [](chip::System::Layer * systemLayer, void * appState) {
+                esp_matter_ota_requestor_start();
+                /* Initialize binding manager */
+                client::binding_manager_init();
+                } , NULL);
         break;
-#endif
+
+    case chip::DeviceLayer::DeviceEventType::kCommissioningComplete:
+        ESP_LOGI(TAG, "Commissioning Complete");
+        break;
 
 #if CONFIG_BT_ENABLED
 #if CONFIG_USE_BLE_ONLY_FOR_COMMISSIONING
-    case chip::DeviceLayer::DeviceEventType::kCommissioningComplete:
-    {
-        esp_err_t err = ESP_OK;
+    case chip::DeviceLayer::DeviceEventType::kCHIPoBLEConnectionClosed:
+        if(chip::Server::GetInstance().GetFabricTable().FabricCount() > 0) {
+            esp_err_t err = ESP_OK;
 #if CONFIG_BT_NIMBLE_ENABLED
-        if (!ble_hs_is_enabled()) {
-            ESP_LOGI(TAG, "BLE already deinited");
-            return;
-        }
+            if (!ble_hs_is_enabled()) {
+                ESP_LOGI(TAG, "BLE already deinited");
+                return;
+            }
 
-        if (nimble_port_stop() != 0) {
-            ESP_LOGE(TAG, "nimble_port_stop() failed");
-            return;
-        }
+            if (nimble_port_stop() != 0) {
+                ESP_LOGE(TAG, "nimble_port_stop() failed");
+                return;
+            }
 
-        nimble_port_deinit();
+            nimble_port_deinit();
 #if ESP_IDF_VERSION < ESP_IDF_VERSION_VAL(5, 0, 0)
-        err = esp_nimble_hci_and_controller_deinit();
+            err = esp_nimble_hci_and_controller_deinit();
 #endif
 #endif /* CONFIG_BT_NIMBLE_ENABLED */
-        err |= esp_bt_mem_release(ESP_BT_MODE_BTDM);
-        if (err != ESP_OK) {
-            ESP_LOGE(TAG, "BLE deinit failed");
-            return;
+#if CONFIG_IDF_TARGET_ESP32
+            err |= esp_bt_mem_release(ESP_BT_MODE_BTDM);
+#elif CONFIG_IDF_TARGET_ESP32C2 || CONFIG_IDF_TARGET_ESP32C3 || CONFIG_IDF_TARGET_ESP32S3 || CONFIG_IDF_TARGET_ESP32H2
+            err |= esp_bt_mem_release(ESP_BT_MODE_BLE);
+#endif
+            if (err != ESP_OK) {
+                ESP_LOGE(TAG, "BLE deinit failed");
+                return;
+            }
+            ESP_LOGI(TAG, "BLE deinit successful and memory reclaimed");
         }
-        ESP_LOGI(TAG, "BLE deinit successful and memory reclaimed");
         break;
-    }
 #endif /* CONFIG_USE_BLE_ONLY_FOR_COMMISSIONING */
 #endif /* CONFIG_BT_ENABLED */
     default:
@@ -899,7 +893,7 @@ static void device_callback_internal(const ChipDeviceEvent * event, intptr_t arg
     }
 }
 
-static esp_err_t chip_init(event_callback_t callback)
+static esp_err_t chip_init(event_callback_t callback, intptr_t callback_arg)
 {
     if (chip::Platform::MemoryInit() != CHIP_NO_ERROR) {
         ESP_LOGE(TAG, "Failed to initialize CHIP memory pool");
@@ -910,18 +904,7 @@ static esp_err_t chip_init(event_callback_t callback)
         return ESP_FAIL;
     }
 
-#if CONFIG_ENABLE_ESP32_FACTORY_DATA_PROVIDER
-    SetCommissionableDataProvider(&factory_data_provider);
-#if CONFIG_ENABLE_ESP32_DEVICE_INSTANCE_INFO_PROVIDER
-    SetDeviceInstanceInfoProvider(&factory_data_provider);
-#endif // CONFIG_ENABLE_ESP32_DEVICE_INSTANCE_INFO_PROVIDER
-#if CONFIG_ENABLE_ESP32_DEVICE_INFO_PROVIDER
-    SetDeviceInfoProvider(&device_info_provider);
-#endif // CONFIG_ENABLE_ESP32_DEVICE_INFO_PROVIDER
-#endif // CONFIG_ENABLE_ESP32_FACTORY_DATA_PROVIDER
-
-    SetDeviceAttestationCredentialsProvider(get_dac_provider());
-
+    setup_providers();
     ConnectivityMgr().SetBLEAdvertisingEnabled(true);
     // ConnectivityMgr().SetWiFiAPMode(ConnectivityManager::kWiFiAPMode_Enabled);
     if (PlatformMgr().StartEventLoopTask() != CHIP_NO_ERROR) {
@@ -930,7 +913,9 @@ static esp_err_t chip_init(event_callback_t callback)
         return ESP_FAIL;
     }
     PlatformMgr().AddEventHandler(device_callback_internal, static_cast<intptr_t>(NULL));
-    PlatformMgr().AddEventHandler(callback, static_cast<intptr_t>(NULL));
+    if(callback) {
+       PlatformMgr().AddEventHandler(callback, callback_arg);
+    }
 #if CHIP_DEVICE_CONFIG_ENABLE_THREAD
     if (ThreadStackMgr().InitThreadStack() != CHIP_NO_ERROR) {
         ESP_LOGE(TAG, "Failed to initialize Thread stack");
@@ -949,15 +934,26 @@ static esp_err_t chip_init(event_callback_t callback)
     return ESP_OK;
 }
 
-esp_err_t start(event_callback_t callback)
+esp_err_t start(event_callback_t callback, intptr_t callback_arg)
 {
     if (esp_matter_started) {
         ESP_LOGE(TAG, "esp_matter has started");
         return ESP_ERR_INVALID_STATE;
     }
+    esp_err_t err = esp_event_loop_create_default();
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Error create default event loop");
+        return err;
+    }
+#if CHIP_DEVICE_CONFIG_ENABLE_WIFI
+    if (chip::DeviceLayer::Internal::ESP32Utils::InitWiFiStack() != CHIP_NO_ERROR) {
+        ESP_LOGE(TAG, "Error initializing Wi-Fi stack");
+        return ESP_FAIL;
+    }
+#endif
     esp_matter_ota_requestor_init();
 
-    esp_err_t err = chip_init(callback);
+    err = chip_init(callback, callback_arg);
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "Error initializing matter");
         return err;
@@ -988,7 +984,7 @@ esp_err_t factory_reset()
         while (endpoint) {
             err = endpoint::erase_persistent_data(endpoint);
             if (err != ESP_OK) {
-                ESP_LOGE(TAG, "Error erasing persistent data of endpoint %d", endpoint::get_id(endpoint));
+                ESP_LOGE(TAG, "Error erasing persistent data of endpoint %" PRIu16 "", endpoint::get_id(endpoint));
                 continue;
             }
             endpoint = endpoint::get_next(endpoint);
@@ -1014,13 +1010,13 @@ attribute_t *create(cluster_t *cluster, uint32_t attribute_id, uint8_t flags, es
     _cluster_t *current_cluster = (_cluster_t *)cluster;
     attribute_t *existing_attribute = get(cluster, attribute_id);
     if (existing_attribute) {
-        ESP_LOGW(TAG, "Attribute 0x%04x on cluster 0x%04x already exists. Not creating again.", attribute_id,
+        ESP_LOGW(TAG, "Attribute 0x%08" PRIX32 " on cluster 0x%08" PRIX32 " already exists. Not creating again.", attribute_id,
                  current_cluster->cluster_id);
         return existing_attribute;
     }
 
     /* Allocate */
-    _attribute_t *attribute = (_attribute_t *)calloc(1, sizeof(_attribute_t));
+    _attribute_t *attribute = (_attribute_t *)esp_matter_mem_calloc(1, sizeof(_attribute_t));
     if (!attribute) {
         ESP_LOGE(TAG, "Couldn't allocate _attribute_t");
         return NULL;
@@ -1045,6 +1041,7 @@ attribute_t *create(cluster_t *cluster, uint32_t attribute_id, uint8_t flags, es
 
     if (attribute->flags & ATTRIBUTE_FLAG_NONVOLATILE) {
         esp_matter_attr_val_t val_nvs = esp_matter_invalid(NULL);
+        val_nvs.type = val.type;
         esp_err_t err = get_val_from_nvs((attribute_t *)attribute, &val_nvs);
         if (err == ESP_OK) {
             set_val((attribute_t *)attribute, &val_nvs);
@@ -1089,17 +1086,17 @@ static esp_err_t destroy(attribute_t *attribute)
         current_attribute->val.type == ESP_MATTER_VAL_TYPE_ARRAY) {
         /* Free buf */
         if (current_attribute->val.val.a.b) {
-            free(current_attribute->val.val.a.b);
+            esp_matter_mem_free(current_attribute->val.val.a.b);
         }
     }
 
     /* Free bounds */
     if (current_attribute->bounds) {
-        free(current_attribute->bounds);
+        esp_matter_mem_free(current_attribute->bounds);
     }
 
     /* Free */
-    free(current_attribute);
+    esp_matter_mem_free(current_attribute);
     return ESP_OK;
 }
 
@@ -1161,12 +1158,12 @@ esp_err_t set_val(attribute_t *attribute, esp_matter_attr_val_t *val)
         val->type == ESP_MATTER_VAL_TYPE_ARRAY) {
         /* Free old buf */
         if (current_attribute->val.val.a.b) {
-            free(current_attribute->val.val.a.b);
+            esp_matter_mem_free(current_attribute->val.val.a.b);
             current_attribute->val.val.a.b = NULL;
         }
         if (val->val.a.s > 0) {
             /* Alloc new buf */
-            uint8_t *new_buf = (uint8_t *)calloc(1, val->val.a.s);
+            uint8_t *new_buf = (uint8_t *)esp_matter_mem_calloc(1, val->val.a.s);
             if (!new_buf) {
                 ESP_LOGE(TAG, "Could not allocate new buffer");
                 return ESP_ERR_NO_MEM;
@@ -1226,7 +1223,7 @@ esp_err_t add_bounds(attribute_t *attribute, esp_matter_attr_val_t min, esp_matt
     free_default_value(attribute);
 
     /* Allocate and set */
-    current_attribute->bounds = (esp_matter_attr_bounds_t *)calloc(1, sizeof(esp_matter_attr_bounds_t));
+    current_attribute->bounds = (esp_matter_attr_bounds_t *)esp_matter_mem_calloc(1, sizeof(esp_matter_attr_bounds_t));
     if (!current_attribute->bounds) {
         ESP_LOGE(TAG, "Could not allocate bounds");
         return ESP_ERR_NO_MEM;
@@ -1296,15 +1293,15 @@ esp_err_t store_val_in_nvs(attribute_t *attribute)
     uint16_t endpoint_id = current_attribute->endpoint_id;
     char nvs_namespace[16] = {0};
     char attribute_key[16] = {0};
-    snprintf(nvs_namespace, 16, "endpoint_%X", endpoint_id); /* endpoint_id */
-    snprintf(attribute_key, 16, "%X:%X", cluster_id, attribute_id); /* cluster_id:attribute_id */
+    snprintf(nvs_namespace, 16, "endpoint_%" PRIX16 "", endpoint_id); /* endpoint_id */
+    snprintf(attribute_key, 16, "%" PRIX32 ":%" PRIX32 "", cluster_id, attribute_id); /* cluster_id:attribute_id */
 
     nvs_handle_t handle;
     esp_err_t err = nvs_open_from_partition(ESP_MATTER_NVS_PART_NAME, nvs_namespace, NVS_READWRITE, &handle);
     if (err != ESP_OK) {
         return err;
     }
-    ESP_LOGD(TAG, "strore attribute in nvs: endpoint_id-0x%x, cluster_id-0x%x, attribute_id-0x%x",
+    ESP_LOGD(TAG, "Store attribute in nvs: endpoint_id-0x%" PRIx16 ", cluster_id-0x%" PRIx32 ", attribute_id-0x%" PRIx32 "",
              endpoint_id, cluster_id, attribute_id);
     if (current_attribute->val.type == ESP_MATTER_VAL_TYPE_CHAR_STRING ||
         current_attribute->val.type == ESP_MATTER_VAL_TYPE_OCTET_STRING ||
@@ -1317,7 +1314,108 @@ esp_err_t store_val_in_nvs(attribute_t *attribute)
             err = ESP_OK;
         }
     } else {
+        // Handling how to store attributes in NVS based on config option.
+#if CONFIG_ESP_MATTER_NVS_USE_COMPACT_ATTR_STORAGE
+        // This switch case handles primitive data types
+        switch (current_attribute->val.type)
+        {
+            case ESP_MATTER_VAL_TYPE_BOOLEAN:
+            {
+                err = nvs_set_u8(handle, attribute_key, current_attribute->val.val.b != 0);
+                break;
+            }
+
+            case ESP_MATTER_VAL_TYPE_INTEGER:
+            case ESP_MATTER_VAL_TYPE_NULLABLE_INTEGER:
+            {
+                err = nvs_set_i32(handle, attribute_key, current_attribute->val.val.i);
+                break;
+            }
+
+            // no nvs api to store float, storing as blob
+            case ESP_MATTER_VAL_TYPE_FLOAT:
+            case ESP_MATTER_VAL_TYPE_NULLABLE_FLOAT:
+            {
+                err = nvs_set_blob(handle, attribute_key, &current_attribute->val.val.f, sizeof(current_attribute->val.val.f));
+                break;
+            }
+
+            case ESP_MATTER_VAL_TYPE_INT8:
+            case ESP_MATTER_VAL_TYPE_NULLABLE_INT8:
+            {
+                err = nvs_set_i8(handle, attribute_key, current_attribute->val.val.i8);
+                break;
+            }
+
+            case ESP_MATTER_VAL_TYPE_UINT8:
+            case ESP_MATTER_VAL_TYPE_ENUM8:
+            case ESP_MATTER_VAL_TYPE_BITMAP8:
+            case ESP_MATTER_VAL_TYPE_NULLABLE_UINT8:
+            case ESP_MATTER_VAL_TYPE_NULLABLE_ENUM8:
+            case ESP_MATTER_VAL_TYPE_NULLABLE_BITMAP8:
+            {
+                err = nvs_set_u8(handle, attribute_key, current_attribute->val.val.u8);
+                break;
+            }
+
+            case ESP_MATTER_VAL_TYPE_INT16:
+            case ESP_MATTER_VAL_TYPE_NULLABLE_INT16:
+            {
+                err = nvs_set_i16(handle, attribute_key, current_attribute->val.val.i16);
+                break;
+            }
+
+            case ESP_MATTER_VAL_TYPE_UINT16:
+            case ESP_MATTER_VAL_TYPE_BITMAP16:
+            case ESP_MATTER_VAL_TYPE_NULLABLE_UINT16:
+            case ESP_MATTER_VAL_TYPE_NULLABLE_BITMAP16:
+            {
+                err = nvs_set_u16(handle, attribute_key, current_attribute->val.val.u16);
+                break;
+            }
+
+            case ESP_MATTER_VAL_TYPE_INT32:
+            case ESP_MATTER_VAL_TYPE_NULLABLE_INT32:
+            {
+                err = nvs_set_i32(handle, attribute_key, current_attribute->val.val.i32);
+                break;
+            }
+
+            case ESP_MATTER_VAL_TYPE_UINT32:
+            case ESP_MATTER_VAL_TYPE_BITMAP32:
+            case ESP_MATTER_VAL_TYPE_NULLABLE_UINT32:
+            case ESP_MATTER_VAL_TYPE_NULLABLE_BITMAP32:
+            {
+                err = nvs_set_u32(handle, attribute_key, current_attribute->val.val.u32);
+                break;
+            }
+
+            case ESP_MATTER_VAL_TYPE_INT64:
+            case ESP_MATTER_VAL_TYPE_NULLABLE_INT64:
+            {
+                err = nvs_set_i64(handle, attribute_key, current_attribute->val.val.i64);
+                break;
+            }
+
+            case ESP_MATTER_VAL_TYPE_UINT64:
+            case ESP_MATTER_VAL_TYPE_NULLABLE_UINT64:
+            {
+                err = nvs_set_u64(handle, attribute_key, current_attribute->val.val.u64);
+                break;
+            }
+
+            default:
+            {
+                // handle the case where the type is not recognized
+                err = ESP_ERR_INVALID_ARG;
+                ESP_LOGE(TAG, "Invalid attribute type: %u", current_attribute->val.type);
+                break;
+            }
+        }
+#else
         err = nvs_set_blob(handle, attribute_key, &current_attribute->val, sizeof(esp_matter_attr_val_t));
+#endif // CONFIG_ESP_MATTER_NVS_USE_COMPACT_ATTR_STORAGE
+
         nvs_commit(handle);
     }
     nvs_close(handle);
@@ -1338,22 +1436,22 @@ esp_err_t get_val_from_nvs(attribute_t *attribute, esp_matter_attr_val_t *val)
     uint16_t endpoint_id = current_attribute->endpoint_id;
     char nvs_namespace[16] = {0};
     char attribute_key[16] = {0};
-    snprintf(nvs_namespace, 16, "endpoint_%X", endpoint_id); /* endpoint_id */
-    snprintf(attribute_key, 16, "%X:%X", cluster_id, attribute_id); /* cluster_id:attribute_id */
+    snprintf(nvs_namespace, 16, "endpoint_%" PRIX16 "", endpoint_id); /* endpoint_id */
+    snprintf(attribute_key, 16, "%" PRIX32 ":%" PRIX32 "", cluster_id, attribute_id); /* cluster_id:attribute_id */
 
     nvs_handle_t handle;
     esp_err_t err = nvs_open_from_partition(ESP_MATTER_NVS_PART_NAME, nvs_namespace, NVS_READONLY, &handle);
     if (err != ESP_OK) {
         return err;
     }
-    ESP_LOGD(TAG, "read attribute from nvs: endpoint_id-0x%x, cluster_id-0x%x, attribute_id-0x%x",
+    ESP_LOGD(TAG, "read attribute from nvs: endpoint_id-0x%" PRIx16 ", cluster_id-0x%" PRIx32 ", attribute_id-0x%" PRIx32 "",
              endpoint_id, cluster_id, attribute_id);
     if (current_attribute->val.type == ESP_MATTER_VAL_TYPE_CHAR_STRING ||
         current_attribute->val.type == ESP_MATTER_VAL_TYPE_OCTET_STRING ||
         current_attribute->val.type == ESP_MATTER_VAL_TYPE_ARRAY) {
         size_t len = 0;
         if ((err = nvs_get_blob(handle, attribute_key, NULL, &len)) == ESP_OK) {
-            uint8_t *buffer = (uint8_t *)calloc(1, len);
+            uint8_t *buffer = (uint8_t *)esp_matter_mem_calloc(1, len);
             if (!buffer) {
                 err = ESP_ERR_NO_MEM;
             } else {
@@ -1366,8 +1464,113 @@ esp_err_t get_val_from_nvs(attribute_t *attribute, esp_matter_attr_val_t *val)
             }
         }
     } else {
+        // Handling how to get attributes in NVS based on config option.
+#if CONFIG_ESP_MATTER_NVS_USE_COMPACT_ATTR_STORAGE
+        // This switch case handles primitive data types
+        switch (current_attribute->val.type)
+        {
+            case ESP_MATTER_VAL_TYPE_BOOLEAN:
+            {
+                uint8_t b_val;
+                if ((err = nvs_get_u8(handle, attribute_key, &b_val)) == ESP_OK)
+                {
+                    val->val.b = (b_val != 0);
+                }
+                break;
+            }
+
+            case ESP_MATTER_VAL_TYPE_INTEGER:
+            case ESP_MATTER_VAL_TYPE_NULLABLE_INTEGER:
+            {
+                err = nvs_get_i32(handle, attribute_key, reinterpret_cast<int32_t *>(&val->val.i));
+                break;
+            }
+
+            // no nvs api to read float, since it is stored as blob, reading as blob
+            case ESP_MATTER_VAL_TYPE_FLOAT:
+            case ESP_MATTER_VAL_TYPE_NULLABLE_FLOAT:
+            {
+                size_t length = sizeof(val->val.f);
+                err = nvs_get_blob(handle, attribute_key, &val->val.f, &length);
+                break;
+            }
+
+            case ESP_MATTER_VAL_TYPE_INT8:
+            case ESP_MATTER_VAL_TYPE_NULLABLE_INT8:
+            {
+                err = nvs_get_i8(handle, attribute_key, &val->val.i8);
+                break;
+            }
+
+            case ESP_MATTER_VAL_TYPE_UINT8:
+            case ESP_MATTER_VAL_TYPE_ENUM8:
+            case ESP_MATTER_VAL_TYPE_BITMAP8:
+            case ESP_MATTER_VAL_TYPE_NULLABLE_UINT8:
+            case ESP_MATTER_VAL_TYPE_NULLABLE_ENUM8:
+            case ESP_MATTER_VAL_TYPE_NULLABLE_BITMAP8:
+            {
+                err = nvs_get_u8(handle, attribute_key, &val->val.u8);
+                break;
+            }
+
+            case ESP_MATTER_VAL_TYPE_INT16:
+            case ESP_MATTER_VAL_TYPE_NULLABLE_INT16:
+            {
+                err = nvs_get_i16(handle, attribute_key, &val->val.i16);
+                break;
+            }
+
+            case ESP_MATTER_VAL_TYPE_UINT16:
+            case ESP_MATTER_VAL_TYPE_BITMAP16:
+            case ESP_MATTER_VAL_TYPE_NULLABLE_UINT16:
+            case ESP_MATTER_VAL_TYPE_NULLABLE_BITMAP16:
+            {
+                err = nvs_get_u16(handle, attribute_key, &val->val.u16);
+                break;
+            }
+
+            case ESP_MATTER_VAL_TYPE_INT32:
+            case ESP_MATTER_VAL_TYPE_NULLABLE_INT32:
+            {
+                err = nvs_get_i32(handle, attribute_key, &val->val.i32);
+                break;
+            }
+
+            case ESP_MATTER_VAL_TYPE_UINT32:
+            case ESP_MATTER_VAL_TYPE_BITMAP32:
+            case ESP_MATTER_VAL_TYPE_NULLABLE_UINT32:
+            case ESP_MATTER_VAL_TYPE_NULLABLE_BITMAP32:
+            {
+                err = nvs_get_u32(handle, attribute_key, &val->val.u32);
+                break;
+            }
+
+            case ESP_MATTER_VAL_TYPE_INT64:
+            case ESP_MATTER_VAL_TYPE_NULLABLE_INT64:
+            {
+                err = nvs_get_i64(handle, attribute_key, &val->val.i64);
+                break;
+            }
+
+            case ESP_MATTER_VAL_TYPE_UINT64:
+            case ESP_MATTER_VAL_TYPE_NULLABLE_UINT64:
+            {
+                err = nvs_get_u64(handle, attribute_key, &val->val.u64);
+                break;
+            }
+
+            default:
+            {
+                // handle the case where the type is not recognized
+                err = ESP_ERR_INVALID_ARG;
+                ESP_LOGE(TAG, "Invalid attribute type: %u", current_attribute->val.type);
+                break;
+            }
+        }
+#else
         size_t len = sizeof(esp_matter_attr_val_t);
         err = nvs_get_blob(handle, attribute_key, val, &len);
+#endif // CONFIG_ESP_MATTER_NVS_USE_COMPACT_ATTR_STORAGE
     }
     nvs_close(handle);
     return err;
@@ -1386,13 +1589,13 @@ command_t *create(cluster_t *cluster, uint32_t command_id, uint8_t flags, callba
     _cluster_t *current_cluster = (_cluster_t *)cluster;
     command_t *existing_command = get(cluster, command_id, flags);
     if (existing_command) {
-        ESP_LOGW(TAG, "Command 0x%04x on cluster 0x%04x already exists. Not creating again.", command_id,
+        ESP_LOGW(TAG, "Command 0x%08" PRIX32 " on cluster 0x%08" PRIX32 " already exists. Not creating again.", command_id,
                  current_cluster->cluster_id);
         return existing_command;
     }
 
     /* Allocate */
-    _command_t *command = (_command_t *)calloc(1, sizeof(_command_t));
+    _command_t *command = (_command_t *)esp_matter_mem_calloc(1, sizeof(_command_t));
     if (!command) {
         ESP_LOGE(TAG, "Couldn't allocate _command_t");
         return NULL;
@@ -1428,7 +1631,7 @@ static esp_err_t destroy(command_t *command)
     _command_t *current_command = (_command_t *)command;
 
     /* Free */
-    free(current_command);
+    esp_matter_mem_free(current_command);
     return ESP_OK;
 }
 
@@ -1520,27 +1723,27 @@ cluster_t *create(endpoint_t *endpoint, uint32_t cluster_id, uint8_t flags)
         /* If a server already exists, do not create it again */
         _cluster_t *_existing_cluster = (_cluster_t *)existing_cluster;
         if ((_existing_cluster->flags & CLUSTER_FLAG_SERVER) && (flags & CLUSTER_FLAG_SERVER)) {
-            ESP_LOGW(TAG, "Server Cluster 0x%04x on endpoint 0x%04x already exists. Not creating again.", cluster_id,
+            ESP_LOGW(TAG, "Server Cluster 0x%08" PRIX32 " on endpoint 0x%04" PRIx16 " already exists. Not creating again.", cluster_id,
                      current_endpoint->endpoint_id);
             return existing_cluster;
         }
 
         /* If a client already exists, do not create it again */
         if ((_existing_cluster->flags & CLUSTER_FLAG_CLIENT) && (flags & CLUSTER_FLAG_CLIENT)) {
-            ESP_LOGW(TAG, "Client Cluster 0x%04x on endpoint 0x%04x already exists. Not creating again.", cluster_id,
+            ESP_LOGW(TAG, "Client Cluster 0x%08" PRIX32 " on endpoint 0x%04" PRIx16 " already exists. Not creating again.", cluster_id,
                      current_endpoint->endpoint_id);
             return existing_cluster;
         }
 
         /* The cluster already exists, but is of a different type. Just update the 'Set' part from below. */
-        ESP_LOGI(TAG, "Cluster 0x%04x on endpoint 0x%04x already exists. Updating values.", cluster_id,
+        ESP_LOGI(TAG, "Cluster 0x%08" PRIX32 " on endpoint 0x%04" PRIx16 " already exists. Updating values.", cluster_id,
                  current_endpoint->endpoint_id);
         _existing_cluster->flags |= flags;
         return existing_cluster;
     }
 
     /* Allocate */
-    _cluster_t *cluster = (_cluster_t *)calloc(1, sizeof(_cluster_t));
+    _cluster_t *cluster = (_cluster_t *)esp_matter_mem_calloc(1, sizeof(_cluster_t));
     if (!cluster) {
         ESP_LOGE(TAG, "Couldn't allocate _cluster_t");
         return NULL;
@@ -1592,7 +1795,7 @@ static esp_err_t destroy(cluster_t *cluster)
     }
 
     /* Free */
-    free(current_cluster);
+    esp_matter_mem_free(current_cluster);
     return ESP_OK;
 }
 
@@ -1711,7 +1914,7 @@ endpoint_t *create(node_t *node, uint8_t flags, void *priv_data)
     _node_t *current_node = (_node_t *)node;
 
     /* Allocate */
-    _endpoint_t *endpoint = (_endpoint_t *)calloc(1, sizeof(_endpoint_t));
+    _endpoint_t *endpoint = (_endpoint_t *)esp_matter_mem_calloc(1, sizeof(_endpoint_t));
     if (!endpoint) {
         ESP_LOGE(TAG, "Couldn't allocate _endpoint_t");
         return NULL;
@@ -1771,7 +1974,7 @@ endpoint_t *resume(node_t *node, uint8_t flags, uint16_t endpoint_id, void *priv
      }
 
      /* Allocate */
-     _endpoint_t *endpoint = (_endpoint_t *)calloc(1, sizeof(_endpoint_t));
+     _endpoint_t *endpoint = (_endpoint_t *)esp_matter_mem_calloc(1, sizeof(_endpoint_t));
      if (!endpoint) {
          ESP_LOGE(TAG, "Couldn't allocate _endpoint_t");
          return NULL;
@@ -1839,7 +2042,7 @@ esp_err_t destroy(node_t *node, endpoint_t *endpoint)
     }
 
     /* Free */
-    free(current_endpoint);
+    esp_matter_mem_free(current_endpoint);
     return ESP_OK;
 }
 
@@ -1975,7 +2178,7 @@ node_t *create_raw()
         ESP_LOGE(TAG, "Node already exists");
         return (node_t *)node;
     }
-    node = (_node_t *)calloc(1, sizeof(_node_t));
+    node = (_node_t *)esp_matter_mem_calloc(1, sizeof(_node_t));
     if (!node) {
         ESP_LOGE(TAG, "Couldn't allocate _node_t");
         return NULL;

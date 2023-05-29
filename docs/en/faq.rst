@@ -41,7 +41,7 @@ Bluetooth/BLE does not work on by device:
 -  In this case, the following can be done:
 
    -  Run the device console command:
-      ``matter wifi connect <ssid> <password>``.
+      ``matter esp wifi connect <ssid> <password>``.
    -  Run the chip-tool command for commissioning over ip:
       ``chip-tool pairing onnetwork 0x7283 20202021``.
 
@@ -119,7 +119,7 @@ The QR code on my device console is not rendering properly:
    ::
 
       If QR code is not visible, copy paste the URL in a browser:
-      https://dhrishi.github.io/connectedhomeip/qrcode.html?data=....
+      https://project-chip.github.io/connectedhomeip/qrcode.html?data=....
 
 A1.6 Onboard LED not working
 ----------------------------
@@ -188,3 +188,80 @@ Difference between Rotating ID Unique ID and Unique ID
 -  :project_file:`Zap Light <examples/zap_light/README.md>`
 -  :project_file:`Zigbee Bridge <examples/zigbee_bridge/README.md>`
 -  :project_file:`BLE Mesh Bridge <examples/blemesh_bridge/README.md>`
+
+A1.8 ModuleNotFoundError: No module named 'lark'
+------------------------------------------------
+
+Encountering the above error while building the esp-matter example could indicate that the steps outlined in the
+`getting the repository <https://docs.espressif.com/projects/esp-matter/en/latest/esp32/developing.html#getting-the-repositories>`__
+section of the documentation were not properly followed.
+
+The esp-matter example relies on several python dependencies that can be found in the
+`requirements.txt <https://github.com/espressif/esp-matter/blob/main/requirements.txt>`__.
+These dependencies must be installed into the python environment of the esp-idf to ensure that the example builds successfully.
+
+One recommended approach to installing these requirements is by running the command
+``source $IDF_PATH/export.sh`` before running ``esp-matter/install.sh``, as suggested in the programming guide.
+However, if the error persists, you can try the following steps to resolve it:
+
+    ::
+
+        cd esp-idf
+        source ./export.sh
+
+        cd esp-matter
+        python3 -m pip install -r requirements.txt
+
+        # Now examples will build without any error
+        cd examples/...
+        idf.py build
+
+
+A1.9 Why does free RAM increase after first commissioning
+---------------------------------------------------------
+
+After the first commissioning, you may notice that the free RAM increases. This is because, by default,
+BLE is only used for the commissioning process. Once the commissioning is complete, BLE is deinitialized,
+and all the memory allocated to it is recovered. Here's the link to the
+`implementation <https://github.com/espressif/esp-matter/blob/c52fa686d1a3be275b0a5c872ee5f1a3c8f2420d/components/esp_matter/esp_matter_core.cpp#L859-L891>`__ which frees the BLE memory.
+
+However, if you want to continue using the BLE even after the commissioning process, you can disable the
+``CONFIG_USE_BLE_ONLY_FOR_COMMISSIONING``. This will ensure that the memory allocated to the BLE functionality
+is not released after the commissioning process, and the free RAM won't go up.
+
+A1.10 How to generate Matter Onboarding Codes (QR Code and Manual Pairing Code)
+-------------------------------------------------------------------------------
+
+When creating a factory partition using ``mfg_tool.py``, both the QR code and manual pairing codes are generated.
+
+Along with that, there are two more methods for generating Matter onboarding codes:
+
+-  Python script: `generate_setup_payload.py <https://github.com/project-chip/connectedhomeip/tree/master/src/setup_payload/python>`__.
+
+    ::
+
+        ./generate_setup_payload.py --discriminator 3131 --passcode 20201111 \
+                                    --vendor-id 65521 --product-id 32768 \
+                                    --commissioning-flow 0 --discovery-cap-bitmask 2
+
+- chip-tool
+
+    ::
+
+        // Generate the QR Code
+        chip-tool payload generate-qrcode --discriminator 3131 --setup-pin-code 20201111 \
+                                          --vendor-id 0xFFF1 --product-id 0x8004 \
+                                          --version 0 --commissioning-mode 0 --rendezvous 2
+
+        // Generates the short manual pairing code (11-digit).
+        chip-tool payload generate-manualcode --discriminator 3131 --setup-pin-code 20201111 \
+                                              --version 0 --commissioning-mode 0
+
+        // To generate a long manual pairing code (21-digit) that includes both the vendor ID and product ID,
+        // --commissioning-mode parameter must be set to either 1 or 2, indicating a non-standard commissioning flow.
+        chip-tool payload generate-manualcode --discriminator 3131 --setup-pin-code 20201111 \
+                                              --vendor-id 0xFFF1 --product-id 0x8004 \
+                                              --version 0 --commissioning-mode 1
+
+To create a QR code image, copy the QR code text and paste it into
+`CHIP: QR Code <https://project-chip.github.io/connectedhomeip/qrcode.html>`__.

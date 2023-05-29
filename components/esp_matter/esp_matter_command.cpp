@@ -20,7 +20,6 @@
 #include <app-common/zap-generated/callback.h>
 #include <app/InteractionModelEngine.h>
 #include <app/util/af.h>
-#include <app/util/ember-compatibility-functions.h>
 
 using namespace chip::app::Clusters;
 using chip::app::CommandHandler;
@@ -39,14 +38,14 @@ void DispatchSingleClusterCommandCommon(const ConcreteCommandPath &command_path,
     uint16_t endpoint_id = command_path.mEndpointId;
     uint32_t cluster_id = command_path.mClusterId;
     uint32_t command_id = command_path.mCommandId;
-    ESP_LOGI(TAG, "Received command 0x%04X for enpoint 0x%04X's cluster 0x%08X", command_id, endpoint_id, cluster_id);
+    ESP_LOGI(TAG, "Received command 0x%08" PRIX32 " for endpoint 0x%04" PRIX16 "'s cluster 0x%08" PRIX32 "", command_id, endpoint_id, cluster_id);
 
     node_t *node = node::get();
     endpoint_t *endpoint = endpoint::get(node, endpoint_id);
     cluster_t *cluster = cluster::get(endpoint, cluster_id);
     command_t *command = get(cluster, command_id, COMMAND_FLAG_ACCEPTED);
     if (!command) {
-        ESP_LOGE(TAG, "Command 0x%04X not found", command_id);
+        ESP_LOGE(TAG, "Command 0x%08" PRIX32 " not found", command_id);
         return;
     }
     esp_err_t err = ESP_OK;
@@ -56,8 +55,13 @@ void DispatchSingleClusterCommandCommon(const ConcreteCommandPath &command_path,
     }
     int flags = get_flags(command);
     if (flags & COMMAND_FLAG_CUSTOM) {
-        EmberAfStatus status = (err == ESP_OK) ? EMBER_ZCL_STATUS_SUCCESS : EMBER_ZCL_STATUS_FAILURE;
-        emberAfSendImmediateDefaultResponse(status);
+        chip::app::CommandHandler *command_obj = (chip::app::CommandHandler *)opaque_ptr;
+        if (!command_obj) {
+            ESP_LOGE(TAG, "Command Object cannot be NULL");
+            return;
+        }
+        command_obj->AddStatus(command_path, err == ESP_OK ? chip::Protocols::InteractionModel::Status::Success :
+                                                             chip::Protocols::InteractionModel::Status::Failure);
     }
 }
 
@@ -70,11 +74,7 @@ namespace app {
 void DispatchSingleClusterCommand(const ConcreteCommandPath &command_path, TLVReader &tlv_data,
                                   CommandHandler *command_obj)
 {
-    Compatibility::SetupEmberAfCommandHandler(command_obj, command_path);
-
     esp_matter::command::DispatchSingleClusterCommandCommon(command_path, tlv_data, command_obj);
-
-    Compatibility::ResetEmberAfObjects();
 }
 
 } /* namespace app */
@@ -156,78 +156,6 @@ static esp_err_t esp_matter_command_callback_commissioning_complete(const Concre
     if (error == CHIP_NO_ERROR) {
         emberAfGeneralCommissioningClusterCommissioningCompleteCallback((CommandHandler *)opaque_ptr, command_path,
                                                                         command_data);
-    }
-    return ESP_OK;
-}
-
-static esp_err_t esp_matter_command_callback_scan_networks(const ConcreteCommandPath &command_path, TLVReader &tlv_data,
-                                                           void *opaque_ptr)
-{
-    chip::app::Clusters::NetworkCommissioning::Commands::ScanNetworks::DecodableType command_data;
-    CHIP_ERROR error = Decode(tlv_data, command_data);
-    if (error == CHIP_NO_ERROR) {
-        emberAfNetworkCommissioningClusterScanNetworksCallback((CommandHandler *)opaque_ptr, command_path,
-                                                               command_data);
-    }
-    return ESP_OK;
-}
-
-static esp_err_t esp_matter_command_callback_add_or_update_wifi_network(const ConcreteCommandPath &command_path,
-                                                                        TLVReader &tlv_data, void *opaque_ptr)
-{
-    chip::app::Clusters::NetworkCommissioning::Commands::AddOrUpdateWiFiNetwork::DecodableType command_data;
-    CHIP_ERROR error = Decode(tlv_data, command_data);
-    if (error == CHIP_NO_ERROR) {
-        emberAfNetworkCommissioningClusterAddOrUpdateWiFiNetworkCallback((CommandHandler *)opaque_ptr, command_path,
-                                                                         command_data);
-    }
-    return ESP_OK;
-}
-
-static esp_err_t esp_matter_command_callback_add_or_update_thread_network(const ConcreteCommandPath &command_path,
-                                                                          TLVReader &tlv_data, void *opaque_ptr)
-{
-    chip::app::Clusters::NetworkCommissioning::Commands::AddOrUpdateThreadNetwork::DecodableType command_data;
-    CHIP_ERROR error = Decode(tlv_data, command_data);
-    if (error == CHIP_NO_ERROR) {
-        emberAfNetworkCommissioningClusterAddOrUpdateThreadNetworkCallback((CommandHandler *)opaque_ptr, command_path,
-                                                                           command_data);
-    }
-    return ESP_OK;
-}
-
-static esp_err_t esp_matter_command_callback_remove_network(const ConcreteCommandPath &command_path,
-                                                            TLVReader &tlv_data, void *opaque_ptr)
-{
-    chip::app::Clusters::NetworkCommissioning::Commands::RemoveNetwork::DecodableType command_data;
-    CHIP_ERROR error = Decode(tlv_data, command_data);
-    if (error == CHIP_NO_ERROR) {
-        emberAfNetworkCommissioningClusterRemoveNetworkCallback((CommandHandler *)opaque_ptr, command_path,
-                                                                command_data);
-    }
-    return ESP_OK;
-}
-
-static esp_err_t esp_matter_command_callback_connect_network(const ConcreteCommandPath &command_path,
-                                                             TLVReader &tlv_data, void *opaque_ptr)
-{
-    chip::app::Clusters::NetworkCommissioning::Commands::ConnectNetwork::DecodableType command_data;
-    CHIP_ERROR error = Decode(tlv_data, command_data);
-    if (error == CHIP_NO_ERROR) {
-        emberAfNetworkCommissioningClusterConnectNetworkCallback((CommandHandler *)opaque_ptr, command_path,
-                                                                 command_data);
-    }
-    return ESP_OK;
-}
-
-static esp_err_t esp_matter_command_callback_reorder_network(const ConcreteCommandPath &command_path,
-                                                             TLVReader &tlv_data, void *opaque_ptr)
-{
-    chip::app::Clusters::NetworkCommissioning::Commands::ReorderNetwork::DecodableType command_data;
-    CHIP_ERROR error = Decode(tlv_data, command_data);
-    if (error == CHIP_NO_ERROR) {
-        emberAfNetworkCommissioningClusterReorderNetworkCallback((CommandHandler *)opaque_ptr, command_path,
-                                                                 command_data);
     }
     return ESP_OK;
 }
@@ -401,10 +329,10 @@ static esp_err_t esp_matter_command_callback_notify_update_applied(const Concret
 static esp_err_t esp_matter_command_callback_announce_ota_provider(const ConcreteCommandPath &command_path,
                                                                    TLVReader &tlv_data, void *opaque_ptr)
 {
-    chip::app::Clusters::OtaSoftwareUpdateRequestor::Commands::AnnounceOtaProvider::DecodableType command_data;
+    chip::app::Clusters::OtaSoftwareUpdateRequestor::Commands::AnnounceOTAProvider::DecodableType command_data;
     CHIP_ERROR error = Decode(tlv_data, command_data);
     if (error == CHIP_NO_ERROR) {
-        emberAfOtaSoftwareUpdateRequestorClusterAnnounceOtaProviderCallback((CommandHandler *)opaque_ptr, command_path,
+        emberAfOtaSoftwareUpdateRequestorClusterAnnounceOTAProviderCallback((CommandHandler *)opaque_ptr, command_path,
                                                                             command_data);
     }
     return ESP_OK;
@@ -1474,37 +1402,37 @@ namespace command {
 command_t *create_scan_networks(cluster_t *cluster)
 {
     return esp_matter::command::create(cluster, NetworkCommissioning::Commands::ScanNetworks::Id, COMMAND_FLAG_ACCEPTED,
-                                       esp_matter_command_callback_scan_networks);
+                                       NULL);
 }
 
 command_t *create_add_or_update_wifi_network(cluster_t *cluster)
 {
     return esp_matter::command::create(cluster, NetworkCommissioning::Commands::AddOrUpdateWiFiNetwork::Id,
-                                       COMMAND_FLAG_ACCEPTED, esp_matter_command_callback_add_or_update_wifi_network);
+                                       COMMAND_FLAG_ACCEPTED, NULL);
 }
 
 command_t *create_add_or_update_thread_network(cluster_t *cluster)
 {
     return esp_matter::command::create(cluster, NetworkCommissioning::Commands::AddOrUpdateThreadNetwork::Id,
-                                       COMMAND_FLAG_ACCEPTED, esp_matter_command_callback_add_or_update_thread_network);
+                                       COMMAND_FLAG_ACCEPTED, NULL);
 }
 
 command_t *create_remove_network(cluster_t *cluster)
 {
     return esp_matter::command::create(cluster, NetworkCommissioning::Commands::RemoveNetwork::Id,
-                                       COMMAND_FLAG_ACCEPTED, esp_matter_command_callback_remove_network);
+                                       COMMAND_FLAG_ACCEPTED, NULL);
 }
 
 command_t *create_connect_network(cluster_t *cluster)
 {
     return esp_matter::command::create(cluster, NetworkCommissioning::Commands::ConnectNetwork::Id,
-                                       COMMAND_FLAG_ACCEPTED, esp_matter_command_callback_connect_network);
+                                       COMMAND_FLAG_ACCEPTED, NULL);
 }
 
 command_t *create_reorder_network(cluster_t *cluster)
 {
     return esp_matter::command::create(cluster, NetworkCommissioning::Commands::ReorderNetwork::Id,
-                                       COMMAND_FLAG_ACCEPTED, esp_matter_command_callback_reorder_network);
+                                       COMMAND_FLAG_ACCEPTED, NULL);
 }
 
 command_t *create_scan_networks_response(cluster_t *cluster)
@@ -1672,7 +1600,7 @@ namespace command {
 
 command_t *create_announce_ota_provider(cluster_t *cluster)
 {
-    return esp_matter::command::create(cluster, OtaSoftwareUpdateRequestor::Commands::AnnounceOtaProvider::Id,
+    return esp_matter::command::create(cluster, OtaSoftwareUpdateRequestor::Commands::AnnounceOTAProvider::Id,
                                        COMMAND_FLAG_ACCEPTED, esp_matter_command_callback_announce_ota_provider);
 }
 

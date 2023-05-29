@@ -23,13 +23,12 @@ set(SRC_DIRS_LIST       "."
                         "${MATTER_SDK_PATH}/src/app/clusters/diagnostic-logs-server"
                         "${MATTER_SDK_PATH}/src/app/clusters/door-lock-server"
                         "${MATTER_SDK_PATH}/src/app/clusters/ethernet-network-diagnostics-server"
+                        "${MATTER_SDK_PATH}/src/app/clusters/fan-control-server"
                         "${MATTER_SDK_PATH}/src/app/clusters/fixed-label-server"
                         "${MATTER_SDK_PATH}/src/app/clusters/general-commissioning-server"
                         "${MATTER_SDK_PATH}/src/app/clusters/general-diagnostics-server"
                         "${MATTER_SDK_PATH}/src/app/clusters/group-key-mgmt-server"
-                        "${MATTER_SDK_PATH}/src/app/clusters/groups-client"
                         "${MATTER_SDK_PATH}/src/app/clusters/groups-server"
-                        "${MATTER_SDK_PATH}/src/app/clusters/identify-client"
                         "${MATTER_SDK_PATH}/src/app/clusters/identify-server"
                         "${MATTER_SDK_PATH}/src/app/clusters/keypad-input-server"
                         "${MATTER_SDK_PATH}/src/app/clusters/level-control"
@@ -49,7 +48,6 @@ set(SRC_DIRS_LIST       "."
                         "${MATTER_SDK_PATH}/src/app/clusters/pump-configuration-and-control-client"
                         "${MATTER_SDK_PATH}/src/app/clusters/pump-configuration-and-control-server"
                         "${MATTER_SDK_PATH}/src/app/clusters/scenes"
-                        "${MATTER_SDK_PATH}/src/app/clusters/scenes-client"
                         "${MATTER_SDK_PATH}/src/app/clusters/software-diagnostics-server"
                         "${MATTER_SDK_PATH}/src/app/clusters/switch-server"
                         "${MATTER_SDK_PATH}/src/app/clusters/target-navigator-server"
@@ -71,11 +69,7 @@ set(INCLUDE_DIRS_LIST   "."
                         "${MATTER_SDK_PATH}/src"
                         "${ZAP_GENERATED_PATH}/../")
 
-set(REQUIRES_LIST       chip bt esp_matter_console nvs_flash app_update esp_secure_cert_mgr esp32_mbedtls esp_system route_hook)
-
-if ("${IDF_TARGET}" STREQUAL "esp32h2")
-    list(APPEND REQUIRES_LIST openthread esp_matter_openthread)
-endif()
+set(REQUIRES_LIST       chip bt esp_matter_console nvs_flash app_update esp_secure_cert_mgr esp32_mbedtls esp_system openthread)
 
 idf_component_register( SRC_DIRS        ${SRC_DIRS_LIST}
                         INCLUDE_DIRS    ${INCLUDE_DIRS_LIST}
@@ -85,5 +79,13 @@ idf_component_register( SRC_DIRS        ${SRC_DIRS_LIST}
 # esp-matter/connectedhomeip/connectedhomeip/src/app/EventManagement.cpp:467:23: error: 'writer' is
 # used uninitialized in this function
 idf_build_set_property(COMPILE_OPTIONS "-Wno-error=uninitialized;-Wno-error=maybe-uninitialized;-Wno-missing-field-initializers;" APPEND)
+idf_build_set_property(COMPILE_OPTIONS "-Wno-error=array-bounds" APPEND)
+
+# For Xtensa chips, uint32_t was defined as 'unsigned' before v5.0, and after IDF v5.0 it is defined
+# as 'unsigned long', same as RISC-V. add this compile option to avoid format errors.
+# https://github.com/espressif/esp-idf/issues/6906#issuecomment-1207373706
+if (CONFIG_IDF_TARGET_ARCH_XTENSA AND (${IDF_VERSION_MAJOR} LESS 5))
+    idf_build_set_property(COMPILE_OPTIONS "-Wno-format" APPEND)
+endif()
 target_compile_options(${COMPONENT_LIB} PUBLIC
                        "-DCHIP_ADDRESS_RESOLVE_IMPL_INCLUDE_HEADER=<lib/address_resolve/AddressResolve_DefaultImpl.h>")

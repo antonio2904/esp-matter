@@ -1,7 +1,7 @@
 2. Developing with the SDK
 ==========================
 
-Please refer the :project_file:`Release Notes <RELEASE_NOTES.txt>` to know more about
+Please refer the :project_file:`Release Notes <RELEASE_NOTES.md>` to know more about
 the releases
 
 2.1 Development Setup
@@ -23,8 +23,9 @@ Additionally, we also support developing on Windows Host using WSL.
 
 The Prerequisites for ESP-IDF and Matter:
 
-- Please see `Prerequisites <https://docs.espressif.com/projects/esp-idf/en/v4.4.3/esp32/get-started/index.html#step-1-install-prerequisites>`__ for ESP IDF.
-- Please get the `Prerequisites <https://github.com/project-chip/connectedhomeip/blob/master/docs/guides/BUILDING.md#prerequisites>`__ for Matter.
+- Please see `Prerequisites <https://docs.espressif.com/projects/esp-idf/en/v5.0.1/esp32/get-started/index.html#step-1-install-prerequisites>`__ for ESP IDF.
+- Please get the `Prerequisites <https://github.com/espressif/connectedhomeip/blob/v1.1-branch/docs/guides/BUILDING.md#prerequisites>`__ for Matter.
+
 
 
 
@@ -41,45 +42,68 @@ Development on Windows is supported using Windows Subsystem for Linux (WSL). Ple
   and `WSL <https://github.com/espressif/vscode-esp-idf-extension/blob/master/docs/WSL.md#usbipd>`__ (usbipd-win `WSL Support <https://github.com/dorssel/usbipd-win/wiki/WSL-support>`__).
 - Here onwards process for setting esp-matter and building examples is same as other hosts.
 
-For using VSCode for developement, please check `Developing in WSL <https://code.visualstudio.com/docs/remote/wsl>`__.
+For using VSCode for development, please check `Developing in WSL <https://code.visualstudio.com/docs/remote/wsl>`__.
 
 
 2.1.2 Getting the Repositories
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. only:: esp32 or esp32c3
+.. only:: esp32 or esp32c3 or esp32c2
 
    ::
 
       git clone --recursive https://github.com/espressif/esp-idf.git
-      cd esp-idf; git checkout v4.4.3; git submodule update --init --recursive;
+      cd esp-idf; git checkout v5.0.1; git submodule update --init --recursive;
       ./install.sh
       cd ..
 
-.. only:: esp32h2
+.. only:: esp32h2 or esp32c6
 
    ::
 
       git clone --recursive https://github.com/espressif/esp-idf.git
-      cd esp-idf; git checkout 20949d444f; git submodule update --init --recursive;
+      cd esp-idf; git checkout 420ebd208; git submodule update --init --recursive;
       ./install.sh
       cd ..
 
 Cloning the esp-matter repository takes a while due to a lot of submodules in the upstream connectedhomeip,
 so if you want to do a shallow clone use the following command:
 
-::
+- For Linux host:
 
-   cd esp-idf
-   source ./export.sh
-   cd ..
+    ::
 
-   git clone --depth 1 https://github.com/espressif/esp-matter.git
-   cd esp-matter
-   git submodule update --init --depth 1
-   ./connectedhomeip/connectedhomeip/scripts/checkout_submodules.py --platform esp32 --shallow
-   ./install.sh
-   cd ..
+        cd esp-idf
+        source ./export.sh
+        cd ..
+
+        git clone --depth 1 https://github.com/espressif/esp-matter.git
+        cd esp-matter
+        git submodule update --init --depth 1
+        cd ./connectedhomeip/connectedhomeip
+        ./scripts/checkout_submodules.py --platform esp32 linux --shallow
+        cd ../..
+        ./install.sh
+        cd ..
+
+- For Mac OS-X host:
+
+    ::
+
+        cd esp-idf
+        source ./export.sh
+        cd ..
+
+        git clone --depth 1 https://github.com/espressif/esp-matter.git
+        cd esp-matter
+        git submodule update --init --depth 1
+        cd ./connectedhomeip/connectedhomeip
+        ./scripts/checkout_submodules.py --platform esp32 darwin --shallow
+        cd ../..
+        ./install.sh
+        cd ..
+
+Note: The modules for platform ``linux`` or ``darwin`` are required for the host tools building.
 
 To clone the esp-matter repository with all the submodules, use the following command:
 
@@ -149,17 +173,35 @@ Choose IDF target.
 
       idf.py set-target esp32
 
+.. only:: esp32s3
+
+   ::
+
+      idf.py set-target esp32s3
+
 .. only:: esp32c3
 
    ::
 
       idf.py set-target esp32c3
 
+.. only:: esp32c2
+
+   ::
+
+      idf.py set-target esp32c2
+
 .. only:: esp32h2
 
    ::
 
       idf.py --preview set-target esp32h2
+
+.. only:: esp32c6
+
+   ::
+
+      idf.py --preview set-target esp32c6
 
 -  If IDF target has not been set explicitly, then ``esp32`` is
    considered as default.
@@ -176,6 +218,13 @@ Choose IDF target.
       etc. are selected based on the device selected.
    -  The configuration of the peripheral components can be found in
       ``$ESP_MATTER_DEVICE_PATH/esp_matter_device.cmake``.
+
+.. only:: esp32c6
+
+    -  ESP32-C6 supports both the Wi-Fi and IEEE 802.15.4 radio, so you can run Wi-Fi or Thread matter example on it.
+
+        -  To enable Thread, you should change the menuconfig options to ``CONFIG_OPENTHREAD_ENABLED=y``, ``CONFIG_ENABLE_WIFI_STATION=n``, and  ``CONFIG_USE_MINIMAL_MDNS=n``.
+        -  To enable Wi-Fi. you should change the menuconfig options to ``CONFIG_OPENTHREAD_ENABLED=n``, ``CONFIG_ENABLE_WIFI_STATION=y``, and ``CONFIG_USE_MINIMAL_MDNS=y``.
 
 (When flashing the SDK for the first time, it is recommended to do
 ``idf.py erase_flash`` to wipe out entire flash and start out fresh.)
@@ -199,11 +248,11 @@ Choose IDF target.
 2.2 Commissioning and Control
 -----------------------------
 
-There are a few implementations of Matter commissioner present in the `connectedhomeip <https://github.com/project-chip/connectedhomeip/tree/master/src/controller#implementations>`__ repository.
+There are a few implementations of Matter commissioners present in the `connectedhomeip <https://github.com/espressif/connectedhomeip/tree/v1.0.0.2/src/controller#implementations>`__ repository.
 
 CHIP Tool is an example implementation of Matter commissioner and used for development purposes.
 
-Espressif also has an iOS application, `Espressif-Matter <https://apps.apple.com/in/app/espressif-matter/id1604739172>`__, to commission and control the Matter devices. Please follow `profile installation instructions <https://github.com/project-chip/connectedhomeip/blob/master/docs/guides/darwin.md#profile-installation>`__ in order to use the application.
+Espressif also has an iOS application, `Espressif-Matter <https://apps.apple.com/in/app/espressif-matter/id1604739172>`__, to commission and control the Matter devices. Please follow `profile installation instructions <https://github.com/espressif/connectedhomeip/blob/v1.0.0.2/docs/guides/darwin.md#profile-installation>`__ in order to use the application. Also, make sure to enable Developer Mode on the iOS.
 
 2.2.1 Test Setup (CHIP Tool)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -212,7 +261,7 @@ A host-based chip-tool can be used as a commissioner to commission and control a
 
 ::
 
-   $ESP_MATTER_PATH}/connectedhomeip/connectedhomeip/out/host
+   ${ESP_MATTER_PATH}/connectedhomeip/connectedhomeip/out/host
 
 2.2.1.1 Commissioning
 ^^^^^^^^^^^^^^^^^^^^^
@@ -224,13 +273,17 @@ Use ``chip-tool`` in interactive mode to commission the device:
    chip-tool interactive start
 
 
-.. only:: esp32 or esp32c3
+.. only:: esp32 or esp32s3 or esp32c3 or esp32c2 or esp32c6
 
    ::
 
       pairing ble-wifi 0x7283 <ssid> <passphrase> 20202021 3840
 
-.. only:: esp32h2
+.. only:: esp32c6
+
+    or
+
+.. only:: esp32h2 or esp32c6
 
    ::
 
@@ -247,15 +300,20 @@ Above method commissions the device using setup passcode and discriminator. Devi
 
 To Commission the device using manual pairing code 34970112332
 
-.. only:: esp32 or esp32c3
+.. only:: esp32 or esp32s3 or esp32c3 or esp32c2 or esp32c6
 
     ::
 
         pairing code-wifi 0x7283 <ssid> <passphrase> 34970112332
 
-.. only:: esp32h2
+.. only:: esp32c6
+
+    or
+
+.. only:: esp32h2 or esp32c6
 
     ::
+
         pairing code-thread 0x7283 hex:<operationalDataset> 34970112332
 
 Above default manual pairing code contains following values:
@@ -269,13 +327,17 @@ Above default manual pairing code contains following values:
 
 To commission the device using QR code MT:Y.K9042C00KA0648G00
 
-.. only:: esp32 or esp32c3
+.. only:: esp32 or esp32s3 or esp32c3 or esp32c2 or esp32c6
 
     ::
 
         pairing code-wifi 0x7283 <ssid> <passphrase> MT:Y.K9042C00KA0648G00
 
-.. only:: esp32h2
+.. only:: esp32c6
+
+    or
+
+.. only:: esp32h2 or esp32c6
 
     ::
 
@@ -285,8 +347,8 @@ Above QR Code contains the below default values:
 ::
 
     Version:             0
-    Vendor ID:           65521
-    ProductID:           32768
+    Vendor ID:           65521    (0xFFF1)
+    ProductID:           32768    (0x8000)
     Custom flow:         0        (STANDARD)
     Discovery Bitmask:   0x02     (BLE)
     Long discriminator:  3840     (0xf00)
@@ -352,7 +414,7 @@ Use the cluster commands to control the attributes.
 
 chip-tool when used in interactive mode uses CASE resumption as against establishing CASE for cluster control commands. This results into shorter execution times, thereby improving the overall experience.
 
-For more details on chip-tool usage, check https://github.com/project-chip/connectedhomeip/tree/master/examples/chip-tool
+For more details on chip-tool usage, check https://github.com/espressif/connectedhomeip/tree/v1.0.0.2/examples/chip-tool
 
 2.3 Device console
 ------------------
@@ -370,12 +432,6 @@ The console on the device can be used to run commands for testing. It is configu
    ::
 
       matter wifi mode [disable|ap|sta]
-
--  Wi-Fi connect: Connect to the Access Point
-
-   ::
-
-      matter wifi connect <ssid> <password>
 
 -  Device configuration: Dump the device static configuration:
 
@@ -426,6 +482,12 @@ Additional Matter specific commands:
    ::
 
       matter esp diagnostics mem-dump
+
+-  Wi-Fi
+
+   ::
+
+      matter esp wifi connect <ssid> <password>
 
 2.4 Developing your Product
 ---------------------------
@@ -593,6 +655,28 @@ creating in the *app_main.cpp* of the example. Examples:
       door_lock::config_t door_lock_config;
       endpoint_t *endpoint = door_lock::create(node, &door_lock_config, ENDPOINT_FLAG_NONE);
 
+-  window_covering_device:
+
+   ::
+
+      window_covering_device::config_t window_covering_device_config(static_cast<uint8_t>(chip::app::Clusters::WindowCovering::EndProductType::kTiltOnlyInteriorBlind));
+      endpoint_t *endpoint = window_covering_device::create(node, &window_covering_config, ENDPOINT_FLAG_NONE);
+
+   The ``window_covering_device`` ``config_t`` structure includes a constructor that allows specifying
+   an end product type different than the default one, which is "Roller shade".
+   Once a ``config_t`` instance has been instantiated, its end product type cannot be modified.
+
+- pump
+
+   ::
+
+      pump::config_t pump_config(1, 10, 20);
+      endpoint_t *endpoint = pump::create(node, &pump_config, ENDPOINT_FLAG_NONE);
+
+   The ``pump`` ``config_t`` structure includes a constructor that allows specifying
+   maximum pressure, maximum speed and maximum flow values. If they aren't set, they will be set to null by default.
+   Once a ``config_t`` instance has been instantiated, these three values cannot be modified.
+
 
 2.4.2.2 Clusters
 ^^^^^^^^^^^^^^^^
@@ -612,6 +696,28 @@ Additional clusters can also be added to an endpoint. Examples:
 
       temperature_measurement::config_t temperature_measurement_config;
       cluster_t *cluster = temperature_measurement::create(endpoint, &temperature_measurement_config, CLUSTER_FLAG_SERVER);
+
+- window_covering:
+
+      ::
+   
+         window_covering::config_t window_covering_config(static_cast<uint8_t>(chip::app::Clusters::WindowCovering::EndProductType::kTiltOnlyInteriorBlind));
+         cluster_t *cluster = window_covering::create(endpoint, &window_covering_config, CLUSTER_FLAG_SERVER);
+
+   The ``window_covering`` ``config_t`` structure includes a constructor that allows specifying
+   an end product type different than the default one, which is "Roller shade".
+   Once a ``config_t`` instance has been instantiated, its end product type cannot be modified.
+
+- pump_configuration_and_control:
+
+   ::
+
+      pump_configuration_and_control::config_t pump_configuration_and_control_config(1, 10, 20);
+      cluster_t *cluster = pump_configuration_and_control::create(endpoint, &pump_configuration_and_control_config, CLUSTER_FLAG_SERVER);
+
+   The ``pump_configuration_and_control`` ``config_t`` structure includes a constructor that allows specifying
+   maximum pressure, maximum speed and maximum flow values. If they aren't set, they will be set to null by default.
+   Once a ``config_t`` instance has been instantiated, these three values cannot be modified.
 
 2.4.2.3 Attributes and Commands
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -766,20 +872,21 @@ As an example, you can build *light* example on ``ESP32_custom`` platform with f
 
 2.4.5 Controller Example
 ~~~~~~~~~~~~~~~~~~~~~~~~
-This section introduces the Matter controller example. Now this example supports 4 features of the standard Matter controller, including onnetwork-pairing, unicast-cluster-commands(onoff, levelcontrol, colorcontrol), read-attributes-commands, and unicast-write-attributes-commands(onoff, levelcontrol, colorcontrol).
+This section introduces the Matter controller example. Now this example supports 8 features of the standard Matter controller, including onnetwork-pairing, invoke-cluster-commands, read-attributes-commands, write-attributes-commands, read-events-commands, subscribe-attributes-commands, subscribe-events-commands, and groupsettings-command.
 
 2.4.5.1 Starting with device console
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-After you flash the controller example to the device. you can use `device console<https://docs.espressif.com/projects/esp-matter/en/latest/esp32/developing.html#device-console>` to commission and send commands to the end-device. All of the controller commands start with *matter esp controller*.
+After you flash the controller example to the device, you can use `device console <./developing.html#device-console>`__ to commission and send commands to the end-device. All of the controller commands start with *matter esp controller*.
 
 2.4.5.2 Pairing commands
 ^^^^^^^^^^^^^^^^^^^^^^^^
-The *pairing* command is used for commissioning the end-devices. Here are three standard pairing methods:
+The ``pairing`` command is used for commissioning the end-devices. Here are three standard pairing methods:
 
-- Onnetwork pairing. Before you execute this commissioning method, you should connect both controller and end-device to the same network and ensure the commissioning window of the end-device is opened. You can use the command *matter wifi connect* to complete this process. Then we can start the pairing.
+- Onnetwork pairing. Before you execute this commissioning method, you should connect both controller and end-device to the same network and ensure the commissioning window of the end-device is opened. You can use the command ``matter esp wifi connect`` to complete this process. Then we can start the pairing.
 
    ::
 
+      matter esp wifi connect <ssid> <password>
       matter esp controller pairing onnetwork <node_id> <setup_passcode>
 
 - Ble-wifi pairing. This commissioning method is still not supported on current controller example.
@@ -788,17 +895,19 @@ The *pairing* command is used for commissioning the end-devices. Here are three 
 
 2.4.5.3 Cluster commands
 ^^^^^^^^^^^^^^^^^^^^^^^^
-The *invoke-cmd* command is used for sending cluster commands to the end-devices. Currently the controller only supports commands of on-off, level-control, and color-control clusters.
+The ``invoke-cmd`` command is used for sending cluster commands to the end-devices. Currently the controller only supports commands of on-off, level-control, and color-control clusters. The on-off cluster supports both unicast and multicast sending, and the other two clusters only support unicast sending.
 
 - Send the cluster command:
 
    ::
 
-      matter esp controller invoke-cmd <node_id> <endpoint_id> <cluster_id> <command_id> <command_data>
+      matter esp controller invoke-cmd <node_id | group-id> <endpoint_id> <cluster_id> <command_id> <command_data>
+
+Notes: ``group-id`` should start with the ``0xFFFFFFFFFFFF`` prefix, and ``endpoint-id`` will be ignored for multicast commands.
 
 2.4.5.4 Read attribute commands
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-The *read-attr* command is used for sending the commands of reading attributes on the end-device.
+The ``read-attr`` command is used for sending the commands of reading attributes on the end-device.
 
 - Send the read-attribute command:
 
@@ -806,9 +915,9 @@ The *read-attr* command is used for sending the commands of reading attributes o
 
       matter esp controller read-attr <node_id> <endpoint_id> <cluster_id> <attribute_id>
 
-2.4.5.4 Read event commands
+2.4.5.5 Read event commands
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^
-The *read-event* command is used for sending the commands of reading events on the end-device.
+The ``read-event`` command is used for sending the commands of reading events on the end-device.
 
 - Send the read-event command:
 
@@ -816,9 +925,9 @@ The *read-event* command is used for sending the commands of reading events on t
 
       matter esp controller read-event <node_id> <endpoint_id> <cluster_id> <event_id>
 
-2.4.5.5 Write attribute commands
+2.4.5.6 Write attribute commands
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-The *write-attr* command is used for sending the commands of writing attributes on the end-device. Currently the controller only supports unicast-attributes-writing of on-off, level-control, and color-control clusters.
+The ``write-attr`` command is used for sending the commands of writing attributes on the end-device. Currently the controller only supports unicast-attributes-writing of on-off, level-control, color-control, access-control, binding, and group-key-management clusters.
 
 - Send the write-attribute command:
 
@@ -826,9 +935,9 @@ The *write-attr* command is used for sending the commands of writing attributes 
 
       matter esp controller write-attr <node_id> <endpoint_id> <cluster_id> <attribute_id> <attribute_value>
 
-2.4.5.6 Subscribe attribute commands
+2.4.5.7 Subscribe attribute commands
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-The *subs-attr* command is used for sending the commands of subscribing attributes on the end-device.
+The ``subs-attr`` command is used for sending the commands of subscribing attributes on the end-device.
 
 - Send the subscribe-attribute command:
 
@@ -836,9 +945,9 @@ The *subs-attr* command is used for sending the commands of subscribing attribut
 
      matter esp controller subs-attr <node_id> <endpoint_id> <cluster_id> <attribute_id> <min-interval> <max-interval>
 
-2.4.5.7 Subscribe event commands
+2.4.5.8 Subscribe event commands
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-The *subs-event* command is used for sending the commands of subscribing events on the end-device.
+The ``subs-event`` command is used for sending the commands of subscribing events on the end-device.
 
 - Send the subscribe-event command:
 
@@ -846,11 +955,94 @@ The *subs-event* command is used for sending the commands of subscribing events 
 
      matter esp controller subs-event <node_id> <endpoint_id> <cluster_id> <event_id> <min-interval> <max-interval>
 
+2.4.5.9 Group settings commands
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+The ``group-settings`` command is used for setting group information of the controller. The controller should be the same group with the end-device if it wants to send multicast commands to the end-device.
 
-2.5 Using esp_secure_cert partition
+- Set group information of the controller:
+
+  ::
+
+     matter esp controller group-settings show-groups
+     matter esp controller group-settings add-group <group_id> <group_name>
+     matter esp controller group-settings remove-group <group_id>
+     matter esp controller group-settings show-keysets
+     matter esp controller group-settings add-keyset <ketset_id> <policy> <validity_time> <epoch_key_oct_str>
+     matter esp controller group-settings remove-keyset <ketset_id>
+     matter esp controller group-settings bind-keyset <group_id> <ketset_id>
+     matter esp controller group-settings unbind-keyset <group_id> <ketset_id>
+
+2.5 Factory Data Providers
+--------------------------
+
+2.5.1 Providers Introduction
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+There are four factory data providers, each with its own implementation, that need to be configured. These providers supply the device with necessary factory data, which is then read by the device according to their respective implementations.
+
+- ``Commissionable Data Provider``
+
+  This particular provider is responsible for retrieving commissionable data, which includes information such as setup-discriminator, spake2p-iteration-count, spake2p-salt, spake2p-verifier, and setup-passcode.
+
+- ``Device Attestation Credentials(DAC) Provider``
+
+  This particular provider is responsible for retrieving device attestation credentials, which includes information such as CD, firmware-information, DAC, and PAI certificate. And it can also sign message with the DAC private key.
+
+- ``Device Instance Info Provider``
+
+  This particular provider is responsible for retrieving device instance information, which includes vendor-name, vendor-id, product-name, product-id, product-url, product-label, hardware-version-string, hardware-version, rotating-device-id-unique-id, serial-number, manufacturing-data, and part-number.
+
+- ``Device Info Provider``
+
+  This particular provider is responsible for retrieving device information, which includes fixed-labels, user-labels, supported-locales, and supported-calendar-types.
+
+2.5.2 Configuration Options
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Different implementations of the four providers can be chosen in meuconfig:
+
+- ``Commissionable Data Provider options`` in ``→ Component config → ESP Matter``
+
+  When selecting ``Commissionable Data - Test``, the device will use the hardcoded Commissionable Data.
+
+  When selecting ``Commissionable Data - Factory``, the device will use commissionable data information from the factory partition. This option is visable only when ``CONFIG_ENABLE_ESP32_FACTORY_DATA_PROVIDER`` is selected.
+
+  When selecting ``Commissionable Data - Custom``, the device will use the custom defined commissionable data provider to obtain commissionable data information. ``esp_matter::set_custom_commissionable_data_provider()`` should be called before ``esp_matter::start()`` to set the custom provider.
+
+- ``DAC Provider options`` in ``→ Component config → ESP Matter``
+
+  When selecting ``Attestation - Test``, the device will use the hardcoded Device Attestation Credentials.
+
+  When selecting ``Attestation - Factory``, the device will use the Device Attestation Credentials in the factory partition binary. This option is visable only when ``CONFIG_ENABLE_ESP32_FACTORY_DATA_PROVIDER`` is selected.
+
+  When selecting ``Attestation - Secure Cert``, the device will use the Device Attestation Credentials in the secure cert partition. This option is for the `Pre-Provisioned Modules <./production.html#pre-provisioned-modules>`__. And the original vendor ID and product ID should be added to the CD file for the Pre-Provisioned Modules. Please contact your Espressif contact person for more information.
+
+  When selecting ``Attestation - Custom``, the device will use the custom defined DAC provider to obtain the Device Attestation Credentials. ``esp_matter::set_custom_dac_provider()`` should be called before ``esp_matter::start()`` to set the custom provider.
+
+- ``Device Instance Info Provider options`` in ``→ Component config → ESP Matter``
+
+  When selecting ``Device Instance Info - Test``, the device will use the hardcoded Device Instance Information.
+
+  When selecting ``Device Instance Info - Factory``, the device will use device instance information from the factory partition. This option is visable only when ``CONFIG_ENABLE_ESP32_FACTORY_DATA_PROVIDER`` and ``ENABLE_ESP32_DEVICE_INSTANCE_INFO_PROVIDER`` is selected.
+
+  When selecting ``Device Instance Info - Custom``, the device will use custom defined Device Instance Info Provider to obtain the Device Instance Information. ``esp_matter::set_custom_device_instance_info_provider`` should be called before ``esp_matter::start()`` to set the custom provider.
+
+- ``Device Info Provider options`` in ``→ Component config → ESP Matter``
+
+  When selecting ``Device Info - None``, the device will not use any device information provider. It should be selected when there are not related clusters on the device.
+
+  When selecting ``Device Info - Factory``, the device will use device information from the factory partition. This option is visable only when ``CONFIG_ENABLE_ESP32_FACTORY_DATA_PROVIDER`` and ``ENABLE_ESP32_DEVICE_INFO_PROVIDER`` is selected.
+
+  When selecting ``Device Info - Custom``, the device will use custom defined Device Info Provider to obtain the Device Information. ``esp_matter::set_custom_device_info_provider`` should be called before ``esp_matter::start()`` to set the custom provider.
+
+2.5.3 Custom Providers
+~~~~~~~~~~~~~~~~~~~~~~
+
+In order to use custom providers, you need to define implementations of the four base classes of the providers and override the functions within them. And the custom providers should be set before ``esp_matter::start()`` is called.
+
+2.6 Using esp_secure_cert partition
 -----------------------------------
 
-2.5.1 Configuration Options
+2.6.1 Configuration Options
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Build the firmware with below configuration options
@@ -866,13 +1058,15 @@ Build the firmware with below configuration options
     # Enable some options which reads CD and other basic info from the factory partition
     CONFIG_ENABLE_ESP32_FACTORY_DATA_PROVIDER=y
     CONFIG_ENABLE_ESP32_DEVICE_INSTANCE_INFO_PROVIDER=y
+    CONFIG_FACTORY_COMMISSIONABLE_DATA_PROVIDER=y
+    CONFIG_FACTORY_DEVICE_INSTANCE_INFO_PROVIDER=y
 
 
-2.5.2 Certification Declaration
+2.6.2 Certification Declaration
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 If you do not have an certification declaration file then you can generate the test CD with the help of below mentioned steps.
-We need to generate the new CD because it SHALL match the VID PID in DAC and the ones reported by basic cluster.
+We need to generate the new CD because it SHALL match the VID, PID in DAC and the ones reported by basic cluster.
 
 - Build the host tools if not done already
 
@@ -883,7 +1077,7 @@ We need to generate the new CD because it SHALL match the VID PID in DAC and the
     ninja -C build
 
 Generate the Test CD, please make sure to change the ``-V`` (vendor_id) and ``-p`` (product-id) options based on the ones that are being used.
-For more into about the arguments, please check `here <https://github.com/project-chip/connectedhomeip/tree/master/src/tools/chip-cert#gen-cd>`__.
+For more info about the arguments, please check `here <https://github.com/espressif/connectedhomeip/tree/v1.0.0.2/src/tools/chip-cert#gen-cd>`__.
 
 ::
 
@@ -894,7 +1088,7 @@ For more into about the arguments, please check `here <https://github.com/projec
                               -O TEST_CD_FFF1_8001.der
 
 
-2.5.3 Factory Partition
+2.6.3 Factory Partition
 ~~~~~~~~~~~~~~~~~~~~~~~
 
 Factory partition contains basic information like VID, PID, etc, and CD.
@@ -933,7 +1127,7 @@ Factory partition binary will be generated at the below path. Please check for <
     [2022-12-02 11:18:12,381] [   INFO] - Generated output files at: out/fff1_8001/e17c95e1-521e-4979-b90b-04da648e21bb
 
 
-2.5.4 Flashing firmware, secure cert and factory partition
+2.6.4 Flashing firmware, secure cert and factory partition
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Flashing secure cert partition. Please check partition table for ``esp_secure_cert`` partition address.
@@ -958,7 +1152,7 @@ Flash application
     idf.py flash
 
 
-2.5.5 Test commissioning using chip-tool
+2.6.5 Test commissioning using chip-tool
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 If using the DACs signed by custom PAA that is not present in connectedhomeip repository,

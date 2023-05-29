@@ -207,12 +207,12 @@ attribute_t *create_active_network_faults(cluster_t *cluster, uint8_t *value, ui
 } /* attribute */
 } /* diagnostics_network_thread */
 
-namespace bridged_device_basic {
+namespace bridged_device_basic_information {
 namespace attribute {
-attribute_t *create_bridged_device_basic_node_label(cluster_t *cluster, char *value, uint16_t length);
+attribute_t *create_node_label(cluster_t *cluster, char *value, uint16_t length);
 attribute_t *create_reachable(cluster_t *cluster, bool value);
 } /* attribute */
-} /* bridged_device_basic */
+} /* bridged_device_basic_information */
 
 namespace user_label {
 namespace attribute {
@@ -309,7 +309,7 @@ attribute_t *create_primary_n_intensity(cluster_t * cluster, nullable<uint8_t> v
 
 namespace fan_control {
 namespace attribute {
-attribute_t *create_fan_mode(cluster_t *cluster, uint8_t value);
+attribute_t *create_fan_mode(cluster_t *cluster, uint8_t value, uint8_t min, uint8_t max);
 attribute_t *create_fan_mode_sequence(cluster_t *cluster, uint8_t value);
 attribute_t *create_percent_setting(cluster_t *cluster, nullable<uint8_t> value);
 attribute_t *create_percent_current(cluster_t *cluster, uint8_t value);
@@ -319,6 +319,7 @@ attribute_t *create_percent_current(cluster_t *cluster, uint8_t value);
 namespace thermostat {
 namespace attribute {
 attribute_t *create_local_temperature(cluster_t *cluster, nullable<int16_t> value);
+attribute_t *create_outdoor_temperature(cluster_t *cluster, nullable<int16_t> value);
 attribute_t *create_occupancy(cluster_t *cluster, uint8_t value);
 attribute_t *create_abs_min_heat_setpoint_limit(cluster_t *cluster, int16_t value);
 attribute_t *create_abs_max_heat_setpoint_limit(cluster_t *cluster, int16_t value);
@@ -326,6 +327,8 @@ attribute_t *create_abs_min_cool_setpoint_limit(cluster_t *cluster, int16_t valu
 attribute_t *create_abs_max_cool_setpoint_limit(cluster_t *cluster, int16_t value);
 attribute_t *create_pi_cooling_demand(cluster_t *cluster, uint8_t value);
 attribute_t *create_pi_heating_demand(cluster_t *cluster, uint8_t value);
+attribute_t *create_hvac_system_type_config(cluster_t *cluster, uint8_t value);
+attribute_t *create_local_temperature_calibration(cluster_t *cluster, int8_t value);
 attribute_t *create_occupied_cooling_setpoint(cluster_t *cluster, int16_t value);
 attribute_t *create_occupied_heating_setpoint(cluster_t *cluster, int16_t value);
 attribute_t *create_unoccupied_cooling_setpoint(cluster_t *cluster, int16_t value);
@@ -335,18 +338,35 @@ attribute_t *create_max_heat_setpoint_limit(cluster_t *cluster, int16_t value);
 attribute_t *create_min_cool_setpoint_limit(cluster_t *cluster, int16_t value);
 attribute_t *create_max_cool_setpoint_limit(cluster_t *cluster, int16_t value);
 attribute_t *create_min_setpoint_dead_band(cluster_t *cluster, int8_t value);
+attribute_t *create_remote_sensing(cluster_t *cluster, uint8_t value);
 attribute_t *create_control_sequence_of_operation(cluster_t *cluster, uint8_t value, uint8_t min, uint8_t max);
 attribute_t *create_system_mode(cluster_t *cluster, uint8_t value, uint8_t min, uint8_t max);
 attribute_t *create_thermostat_running_mode(cluster_t *cluster, uint8_t value);
 attribute_t *create_start_of_week(cluster_t *cluster, uint8_t value);
 attribute_t *create_number_of_weekly_transitions(cluster_t *cluster, uint8_t value);
 attribute_t *create_number_of_daily_transitions(cluster_t *cluster, uint8_t value);
+attribute_t *create_temperature_setpoint_hold(cluster_t *cluster, uint8_t value);
+attribute_t *create_temperature_setpoint_hold_duration(cluster_t *cluster, nullable<uint16_t> value);
+attribute_t *create_thermostat_programming_operation_mode(cluster_t *cluster, uint8_t value);
+attribute_t *create_thermostat_running_state(cluster_t *cluster, uint16_t value);
+attribute_t *create_setpoint_change_source(cluster_t *cluster, uint8_t value);
+attribute_t *create_setpoint_change_amount(cluster_t *cluster, nullable<int16_t> value);
+attribute_t *create_setpoint_change_source_timestamp(cluster_t *cluster, uint16_t value);
 attribute_t *create_occupied_setback(cluster_t *cluster, nullable<uint8_t> value);
 attribute_t *create_occupied_setback_min(cluster_t *cluster, nullable<uint8_t> value);
 attribute_t *create_occupied_setback_max(cluster_t *cluster, nullable<uint8_t> value);
 attribute_t *create_unoccupied_setback(cluster_t *cluster, nullable<uint8_t> value);
 attribute_t *create_unoccupied_setback_min(cluster_t *cluster, nullable<uint8_t> value);
 attribute_t *create_unoccupied_setback_max(cluster_t *cluster, nullable<uint8_t> value);
+attribute_t *create_emergency_heat_delta(cluster_t *cluster, uint8_t value);
+attribute_t *create_ac_type(cluster_t *cluster, uint8_t value);
+attribute_t *create_ac_capacity(cluster_t *cluster, uint16_t value);
+attribute_t *create_ac_refrigerant_type(cluster_t *cluster, uint8_t value);
+attribute_t *create_ac_compressor_type(cluster_t *cluster, uint8_t value);
+attribute_t *create_ac_error_code(cluster_t *cluster, uint32_t value);
+attribute_t *create_ac_louver_position(cluster_t *cluster, uint8_t value);
+attribute_t *create_ac_coil_temperature(cluster_t *cluster, nullable<int16_t> value);
+attribute_t *create_ac_capacity_format(cluster_t *cluster, uint8_t value);
 } /* attribute */
 } /* thermostat */
 
@@ -373,17 +393,17 @@ attribute_t *create_number_of_actuations_tilt(cluster_t *cluster, uint16_t value
 attribute_t *create_config_status(cluster_t *cluster, uint8_t value);
 attribute_t *create_current_position_lift_percentage(cluster_t *cluster, nullable<uint8_t> value);
 attribute_t *create_current_position_tilt_percentage(cluster_t *cluster, nullable<uint8_t> value);
-attribute_t *create_operational_status(cluster_t *cluster, nullable<uint8_t> value);
+attribute_t *create_operational_status(cluster_t *cluster, uint8_t value);
 attribute_t *create_target_position_lift_percent_100ths(cluster_t *cluster, nullable<uint16_t> value);
 attribute_t *create_target_position_tilt_percent_100ths(cluster_t *cluster, nullable<uint16_t> value);
-attribute_t *create_end_product_type(cluster_t *cluster, uint8_t value);
+attribute_t *create_end_product_type(cluster_t *cluster, const uint8_t value);
 attribute_t *create_current_position_lift_percent_100ths(cluster_t *cluster, nullable<uint16_t> value);
 attribute_t *create_current_position_tilt_percent_100ths(cluster_t *cluster, nullable<uint16_t> value);
 attribute_t *create_installed_open_limit_lift(cluster_t *cluster, uint16_t value);
 attribute_t *create_installed_closed_limit_lift(cluster_t *cluster, uint16_t value);
 attribute_t *create_installed_open_limit_tilt(cluster_t *cluster, uint16_t value);
 attribute_t *create_installed_closed_limit_tilt(cluster_t *cluster, uint16_t value);
-attribute_t *create_mode(cluster_t *cluster, uint16_t value);
+attribute_t *create_mode(cluster_t *cluster, uint8_t value);
 attribute_t *create_safety_status(cluster_t *cluster, uint16_t value);
 } /* attribute */
 } /* window_covering */
@@ -403,6 +423,15 @@ attribute_t *create_temperature_min_measured_value(cluster_t *cluster, nullable<
 attribute_t *create_temperature_max_measured_value(cluster_t *cluster, nullable<int16_t> value);
 } /* attribute */
 } /* temperature_measurement */
+
+namespace relative_humidity_measurement {
+namespace attribute {
+attribute_t *create_relative_humidity_measured_value(cluster_t *cluster, nullable<uint16_t> value);
+attribute_t *create_relative_humidity_min_measured_value(cluster_t *cluster, nullable<uint16_t> value);
+attribute_t *create_relative_humidity_max_measured_value(cluster_t *cluster, nullable<uint16_t> value);
+attribute_t *create_relative_humidity_tolerance(cluster_t *cluster, nullable<uint16_t> value);
+} /* attribute */
+} /* relative_humidity_measurement */
 
 namespace occupancy_sensing {
 namespace attribute {
@@ -432,6 +461,67 @@ attribute_t *create_active_calendar_type(cluster_t *cluster, nullable<uint8_t> v
 attribute_t *create_supported_calendar_types(cluster_t *cluster, uint8_t *value, uint16_t length, uint16_t count);
 } /* attribute */
 } /* time_format_localization */
+
+namespace illuminance_measurement {
+namespace attribute {
+attribute_t *create_illuminance_measured_value(cluster_t *cluster, nullable<uint16_t> value, nullable<uint16_t> min, nullable<uint16_t> max);
+attribute_t *create_illuminance_min_measured_value(cluster_t *cluster, nullable<uint16_t> value, nullable<uint16_t> min, nullable<uint16_t> max);
+attribute_t *create_illuminance_max_measured_value(cluster_t *cluster, nullable<uint16_t> value, nullable<uint16_t> min, nullable<uint16_t> max);
+attribute_t *create_illuminance_tolerance(cluster_t *cluster, uint16_t value, uint16_t min, uint16_t max);
+attribute_t *create_illuminance_light_sensor_type(cluster_t *cluster, nullable<uint8_t> value, nullable<uint8_t> min, nullable<uint8_t> max);
+} /* attribute */
+} /* illuminance_measurement */
+
+namespace pressure_measurement {
+namespace attribute {
+attribute_t *create_pressure_measured_value(cluster_t *cluster, nullable<int16_t> value);
+attribute_t *create_pressure_min_measured_value(cluster_t *cluster, nullable<int16_t> value);
+attribute_t *create_pressure_max_measured_value(cluster_t *cluster, nullable<int16_t> value);
+attribute_t *create_pressure_tolerance(cluster_t *cluster, uint16_t value, uint16_t min, uint16_t max);
+attribute_t *create_pressure_scaled_value(cluster_t *cluster, nullable<int16_t> value);
+attribute_t *create_pressure_min_scaled_value(cluster_t *cluster, nullable<int16_t> value);
+attribute_t *create_pressure_max_scaled_value(cluster_t *cluster, nullable<int16_t> value);
+attribute_t *create_pressure_scaled_tolerance(cluster_t *cluster, uint16_t value, uint16_t min, uint16_t max);
+attribute_t *create_pressure_scale(cluster_t *cluster, int8_t value);
+} /* attribute */
+} /* pressure_measurement */
+
+namespace flow_measurement {
+namespace attribute {
+attribute_t *create_flow_measured_value(cluster_t *cluster, nullable<uint16_t> value);
+attribute_t *create_flow_min_measured_value(cluster_t *cluster, nullable<uint16_t> value);
+attribute_t *create_flow_max_measured_value(cluster_t *cluster, nullable<uint16_t> value);
+attribute_t *create_flow_tolerance(cluster_t *cluster, uint16_t value, uint16_t min, uint16_t max);
+} /* attribute */
+} /* flow_measurement */
+
+namespace pump_configuration_and_control {
+namespace attribute {
+attribute_t *create_max_pressure(cluster_t *cluster, nullable<int16_t> value);
+attribute_t *create_max_speed(cluster_t *cluster, nullable<uint16_t> value);
+attribute_t *create_max_flow(cluster_t *cluster, nullable<uint16_t> value);
+attribute_t *create_min_const_pressure(cluster_t *cluster, nullable<int16_t> value);
+attribute_t *create_max_const_pressure(cluster_t *cluster, nullable<int16_t> value);
+attribute_t *create_min_comp_pressure(cluster_t *cluster, nullable<int16_t> value);
+attribute_t *create_max_comp_pressure(cluster_t *cluster, nullable<int16_t> value);
+attribute_t *create_min_const_speed(cluster_t *cluster, nullable<uint16_t> value);
+attribute_t *create_max_const_speed(cluster_t *cluster, nullable<uint16_t> value);
+attribute_t *create_min_const_flow(cluster_t *cluster, nullable<uint16_t> value);
+attribute_t *create_max_const_flow(cluster_t *cluster, nullable<uint16_t> value);
+attribute_t *create_min_const_temp(cluster_t *cluster, nullable<int16_t> value);
+attribute_t *create_max_const_temp(cluster_t *cluster, nullable<int16_t> value);
+attribute_t *create_pump_status(cluster_t *cluster, uint16_t value);
+attribute_t *create_effective_operation_mode(cluster_t *cluster, uint8_t value);
+attribute_t *create_effective_control_mode(cluster_t *cluster, uint8_t value);
+attribute_t *create_capacity(cluster_t *cluster, nullable<int16_t> value);
+attribute_t *create_speed(cluster_t *cluster, nullable<uint16_t> value);
+attribute_t *create_lifetime_running_hours(cluster_t *cluster, nullable<uint32_t> value);
+attribute_t *create_pump_power(cluster_t *cluster, nullable<uint32_t> value);
+attribute_t *create_lifetime_energy_consumed(cluster_t *cluster, nullable<uint32_t> value);
+attribute_t *create_operation_mode(cluster_t *cluster, uint8_t value);
+attribute_t *create_control_mode(cluster_t *cluster, uint8_t value);
+} /* attribute */
+} /* pump_configuration_and_control */
 
 } /* cluster */
 } /* esp_matter */

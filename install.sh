@@ -5,7 +5,7 @@ set -e
 basedir=$(dirname "$0")
 ESP_MATTER_PATH=$(cd "${basedir}"; pwd)
 MATTER_PATH=${ESP_MATTER_PATH}/connectedhomeip/connectedhomeip
-export ESP_MATTER_PATH
+export ZAP_INSTALL_PATH=${MATTER_PATH}/.environment/cipd/packages/zap
 
 echo ""
 echo "Running Matter Setup"

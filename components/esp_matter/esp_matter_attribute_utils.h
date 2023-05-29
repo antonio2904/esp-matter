@@ -36,7 +36,7 @@
 #define REMAP_TO_RANGE_INVERSE(value, factor) (factor / (value ? value : 1))
 
 /* Nullable base for nullable attribute */
-#define ESP_MATTER_VAL_NULLANLE_BASE 0x80
+#define ESP_MATTER_VAL_NULLABLE_BASE 0x80
 
 /** ESP Matter Attribute Value type */
 typedef enum {
@@ -79,20 +79,20 @@ typedef enum {
     /** 32 bit bitmap */
     ESP_MATTER_VAL_TYPE_BITMAP32 = 18,
     /** nullable types **/
-    ESP_MATTER_VAL_TYPE_NULLABLE_INTEGER = ESP_MATTER_VAL_TYPE_INTEGER + ESP_MATTER_VAL_NULLANLE_BASE,
-    ESP_MATTER_VAL_TYPE_NULLABLE_FLOAT = ESP_MATTER_VAL_TYPE_FLOAT + ESP_MATTER_VAL_NULLANLE_BASE,
-    ESP_MATTER_VAL_TYPE_NULLABLE_INT8 = ESP_MATTER_VAL_TYPE_INT8 + ESP_MATTER_VAL_NULLANLE_BASE,
-    ESP_MATTER_VAL_TYPE_NULLABLE_UINT8 = ESP_MATTER_VAL_TYPE_UINT8 + ESP_MATTER_VAL_NULLANLE_BASE,
-    ESP_MATTER_VAL_TYPE_NULLABLE_INT16 = ESP_MATTER_VAL_TYPE_INT16 + ESP_MATTER_VAL_NULLANLE_BASE,
-    ESP_MATTER_VAL_TYPE_NULLABLE_UINT16 = ESP_MATTER_VAL_TYPE_UINT16 + ESP_MATTER_VAL_NULLANLE_BASE,
-    ESP_MATTER_VAL_TYPE_NULLABLE_INT32 = ESP_MATTER_VAL_TYPE_INT32 + ESP_MATTER_VAL_NULLANLE_BASE,
-    ESP_MATTER_VAL_TYPE_NULLABLE_UINT32 = ESP_MATTER_VAL_TYPE_UINT32 + ESP_MATTER_VAL_NULLANLE_BASE,
-    ESP_MATTER_VAL_TYPE_NULLABLE_INT64 = ESP_MATTER_VAL_TYPE_INT64 + ESP_MATTER_VAL_NULLANLE_BASE,
-    ESP_MATTER_VAL_TYPE_NULLABLE_UINT64 = ESP_MATTER_VAL_TYPE_UINT64 + ESP_MATTER_VAL_NULLANLE_BASE,
-    ESP_MATTER_VAL_TYPE_NULLABLE_ENUM8 = ESP_MATTER_VAL_TYPE_ENUM8 + ESP_MATTER_VAL_NULLANLE_BASE,
-    ESP_MATTER_VAL_TYPE_NULLABLE_BITMAP8 = ESP_MATTER_VAL_TYPE_BITMAP8 + ESP_MATTER_VAL_NULLANLE_BASE,
-    ESP_MATTER_VAL_TYPE_NULLABLE_BITMAP16 = ESP_MATTER_VAL_TYPE_BITMAP16 + ESP_MATTER_VAL_NULLANLE_BASE,
-    ESP_MATTER_VAL_TYPE_NULLABLE_BITMAP32= ESP_MATTER_VAL_TYPE_BITMAP32 + ESP_MATTER_VAL_NULLANLE_BASE,
+    ESP_MATTER_VAL_TYPE_NULLABLE_INTEGER = ESP_MATTER_VAL_TYPE_INTEGER + ESP_MATTER_VAL_NULLABLE_BASE,
+    ESP_MATTER_VAL_TYPE_NULLABLE_FLOAT = ESP_MATTER_VAL_TYPE_FLOAT + ESP_MATTER_VAL_NULLABLE_BASE,
+    ESP_MATTER_VAL_TYPE_NULLABLE_INT8 = ESP_MATTER_VAL_TYPE_INT8 + ESP_MATTER_VAL_NULLABLE_BASE,
+    ESP_MATTER_VAL_TYPE_NULLABLE_UINT8 = ESP_MATTER_VAL_TYPE_UINT8 + ESP_MATTER_VAL_NULLABLE_BASE,
+    ESP_MATTER_VAL_TYPE_NULLABLE_INT16 = ESP_MATTER_VAL_TYPE_INT16 + ESP_MATTER_VAL_NULLABLE_BASE,
+    ESP_MATTER_VAL_TYPE_NULLABLE_UINT16 = ESP_MATTER_VAL_TYPE_UINT16 + ESP_MATTER_VAL_NULLABLE_BASE,
+    ESP_MATTER_VAL_TYPE_NULLABLE_INT32 = ESP_MATTER_VAL_TYPE_INT32 + ESP_MATTER_VAL_NULLABLE_BASE,
+    ESP_MATTER_VAL_TYPE_NULLABLE_UINT32 = ESP_MATTER_VAL_TYPE_UINT32 + ESP_MATTER_VAL_NULLABLE_BASE,
+    ESP_MATTER_VAL_TYPE_NULLABLE_INT64 = ESP_MATTER_VAL_TYPE_INT64 + ESP_MATTER_VAL_NULLABLE_BASE,
+    ESP_MATTER_VAL_TYPE_NULLABLE_UINT64 = ESP_MATTER_VAL_TYPE_UINT64 + ESP_MATTER_VAL_NULLABLE_BASE,
+    ESP_MATTER_VAL_TYPE_NULLABLE_ENUM8 = ESP_MATTER_VAL_TYPE_ENUM8 + ESP_MATTER_VAL_NULLABLE_BASE,
+    ESP_MATTER_VAL_TYPE_NULLABLE_BITMAP8 = ESP_MATTER_VAL_TYPE_BITMAP8 + ESP_MATTER_VAL_NULLABLE_BASE,
+    ESP_MATTER_VAL_TYPE_NULLABLE_BITMAP16 = ESP_MATTER_VAL_TYPE_BITMAP16 + ESP_MATTER_VAL_NULLABLE_BASE,
+    ESP_MATTER_VAL_TYPE_NULLABLE_BITMAP32= ESP_MATTER_VAL_TYPE_BITMAP32 + ESP_MATTER_VAL_NULLABLE_BASE,
 } esp_matter_val_type_t;
 
 /** ESP Matter Value */
@@ -360,6 +360,22 @@ esp_err_t set_callback(callback_t callback);
  */
 esp_err_t update(uint16_t endpoint_id, uint32_t cluster_id, uint32_t attribute_id, esp_matter_attr_val_t *val);
 
+/** Attribute report
+ *
+ * This API reports the attribute value.
+ * After this API is called, the application doesn't gets the attribute update callback with `PRE_UPDATE` or `POST_UPDATE`, the
+ * attribute is updated in the database.
+ *
+ * @param[in] endpoint_id Endpoint ID of the attribute.
+ * @param[in] cluster_id Cluster ID of the attribute.
+ * @param[in] attribute_id Attribute ID of the attribute.
+ * @param[in] val Pointer to new value to report, of type `esp_matter_attr_val_t`. Appropriate elements should be used as per the value type.
+ *
+ * @return ESP_OK on success.
+ * @return error in case of failure.
+ */
+esp_err_t report(uint16_t endpoint_id, uint32_t cluster_id, uint32_t attribute_id, esp_matter_attr_val_t *val);
+
 /** Attribute value print
  *
  * This API prints the attribute value according to the type.
@@ -368,8 +384,9 @@ esp_err_t update(uint16_t endpoint_id, uint32_t cluster_id, uint32_t attribute_i
  * @param[in] cluster_id Cluster ID of the attribute.
  * @param[in] attribute_id Attribute ID of the attribute.
  * @param[in] val Pointer to `esp_matter_attr_val_t`. Appropriate elements should be used as per the value type.
+ * @param[in] is_read Boolean variable to indicate read or write for attributes.
  */
-void val_print(uint16_t endpoint_id, uint32_t cluster_id, uint32_t attribute_id, esp_matter_attr_val_t *val);
+void val_print(uint16_t endpoint_id, uint32_t cluster_id, uint32_t attribute_id, esp_matter_attr_val_t *val, bool is_read);
 
 } /* attribute */
 } /* esp_matter */

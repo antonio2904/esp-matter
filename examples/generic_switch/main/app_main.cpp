@@ -18,7 +18,9 @@
 #include <app_reset.h>
 
 static const char *TAG = "app_main";
-uint16_t switch_endpoint_id = 0;
+
+static uint16_t configured_buttons = 0;
+static button_endpoint button_list[CONFIG_MAX_CONFIGURABLE_BUTTONS];
 
 using namespace esp_matter;
 using namespace esp_matter::attribute;
@@ -62,9 +64,9 @@ static void app_event_cb(const ChipDeviceEvent *event, intptr_t arg)
 }
 
 static esp_err_t app_identification_cb(identification::callback_type_t type, uint16_t endpoint_id, uint8_t effect_id,
-                                       void *priv_data)
+                                       uint8_t effect_variant, void *priv_data)
 {
-    ESP_LOGI(TAG, "Identification callback: type: %d, effect: %d", type, effect_id);
+    ESP_LOGI(TAG, "Identification callback: type: %u, effect: %u, variant: %u", type, effect_id, effect_variant);
     return ESP_OK;
 }
 
@@ -82,33 +84,57 @@ static esp_err_t app_attribute_update_cb(attribute::callback_type_t type, uint16
     return err;
 }
 
-extern "C" void app_main()
+static esp_err_t create_button(struct gpio_button* button, node_t* node)
 {
     esp_err_t err = ESP_OK;
 
-    /* Initialize the ESP NVS layer */
-    nvs_flash_init();
-
     /* Initialize driver */
-    app_driver_handle_t button_handle = app_driver_button_init();
+    app_driver_handle_t button_handle = app_driver_button_init(button);
 
-    /* Create a Matter node and add the mandatory Root Node device type on endpoint 0 */
-    node::config_t node_config;
-    node_t *node = node::create(&node_config, app_attribute_update_cb, app_identification_cb);
-
+    /* Create a new endpoint. */
     generic_switch::config_t switch_config;
     endpoint_t *endpoint = generic_switch::create(node, &switch_config, ENDPOINT_FLAG_NONE, button_handle);
 
     /* These node and endpoint handles can be used to create/add other endpoints and clusters. */
-    if (!node || !endpoint) {
+    if (!node || !endpoint)
+    {
         ESP_LOGE(TAG, "Matter node creation failed");
+        err = ESP_FAIL;
+        return err;
     }
 
-    switch_endpoint_id = endpoint::get_id(endpoint);
-    ESP_LOGI(TAG, "Generic Switch created with endpoint_id %d", switch_endpoint_id);
+    for (int i = 0; i < configured_buttons; i++) {
+        if (button_list[i].button == button) {
+            break;
+        }
+    }
+
+    /* Check for maximum physical buttons that can be configured. */
+    if (configured_buttons <CONFIG_MAX_CONFIGURABLE_BUTTONS) {
+        button_list[configured_buttons].button = button;
+        button_list[configured_buttons].endpoint = endpoint::get_id(endpoint);
+        configured_buttons++;
+    }
+    else
+    {
+        ESP_LOGI(TAG, "Cannot configure more buttons");
+        err = ESP_FAIL;
+        return err;
+    }
+
+    static uint16_t generic_switch_endpoint_id = 0;
+    generic_switch_endpoint_id = endpoint::get_id(endpoint);
+    ESP_LOGI(TAG, "Generic Switch created with endpoint_id %d", generic_switch_endpoint_id);
+
+    cluster::fixed_label::config_t fl_config;
+    cluster_t *fl_cluster = cluster::fixed_label::create(endpoint, &fl_config, CLUSTER_FLAG_SERVER);
+
+    cluster::user_label::config_t ul_config;
+    cluster_t *ul_cluster = cluster::user_label::create(endpoint, &ul_config, CLUSTER_FLAG_SERVER);
 
     /* Add additional features to the node */
     cluster_t *cluster = cluster::get(endpoint, Switch::Id);
+
 #if CONFIG_GENERIC_SWITCH_TYPE_LATCHING
     cluster::switch_cluster::feature::latching_switch::add(cluster);
 #endif
@@ -116,15 +142,68 @@ extern "C" void app_main()
 #if CONFIG_GENERIC_SWITCH_TYPE_MOMENTARY
     cluster::switch_cluster::feature::momentary_switch::add(cluster);
 #endif
+
+    return err;
+}
+
+int get_endpoint(gpio_button* button) {
+    for (int i = 0; i < configured_buttons; i++) {
+        if (button_list[i].button == button) {
+            return button_list[i].endpoint;
+        }
+    }
+    return -1;
+}
+
+extern "C" void app_main()
+{
+    esp_err_t err = ESP_OK;
+
+    /* Initialize the ESP NVS layer */
+    nvs_flash_init();
+
+    /* Create a Matter node and add the mandatory Root Node device type on endpoint 0 */
+    node::config_t node_config;
+    node_t *node = node::create(&node_config, app_attribute_update_cb, app_identification_cb);
+
+    /* Call for Boot button */
+    err = create_button(NULL, node);
+
+    /* Use the code snippet commented below to create more physical buttons. */
+
+    /*  // Creating a gpio button. More buttons can be created in the same fashion specifying GPIO_PIN_VALUE.
+     *  struct gpio_button button;
+     *  button.GPIO_PIN_VALUE = GPIO_NUM_6;
+     *  // Call to createButton function to configure your button.
+     *  create_button(&button, node);
+     */
+
     /* Matter start */
     err = esp_matter::start(app_event_cb);
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "Matter start failed: %d", err);
     }
 
+    nvs_handle_t handle;
+    nvs_open_from_partition(CONFIG_CHIP_FACTORY_NAMESPACE_PARTITION_LABEL, "chip-factory", NVS_READWRITE, &handle);
+
+    int32_t out_value = 0;
+    if (nvs_get_i32(handle, "fl-sz/1", &out_value) == ESP_ERR_NVS_NOT_FOUND)
+    {
+       nvs_set_i32(handle, "fl-sz/1", 2);
+       nvs_set_str(handle, "fl-k/1/0", "myEP1LBL1");
+       nvs_set_str(handle, "fl-v/1/0", "valEP1LBL1");
+       nvs_set_str(handle, "fl-k/1/1", "myEP1LBL2");
+       nvs_set_str(handle, "fl-v/1/1", "valEP1LBL2");
+    }
+
+    nvs_commit(handle);
+    nvs_close(handle);
+
 #if CONFIG_ENABLE_CHIP_SHELL
     esp_matter::console::diagnostics_register_commands();
     esp_matter::console::wifi_register_commands();
     esp_matter::console::init();
 #endif
+
 }

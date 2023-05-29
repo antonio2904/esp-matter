@@ -55,6 +55,14 @@
 #define ESP_MATTER_OCCUPANCY_SENSOR_DEVICE_TYPE_VERSION 2
 #define ESP_MATTER_CONTACT_SENSOR_DEVICE_TYPE_ID 0x0015
 #define ESP_MATTER_CONTACT_SENSOR_DEVICE_TYPE_VERSION 1
+#define ESP_MATTER_LIGHT_SENSOR_DEVICE_TYPE_ID 0x0106
+#define ESP_MATTER_LIGHT_SENSOR_DEVICE_TYPE_VERSION 2
+#define ESP_MATTER_PRESSURE_SENSOR_DEVICE_TYPE_ID 0x0305
+#define ESP_MATTER_PRESSURE_SENSOR_DEVICE_TYPE_VERSION 2
+#define ESP_MATTER_FLOW_SENSOR_DEVICE_TYPE_ID 0x0306
+#define ESP_MATTER_FLOW_SENSOR_DEVICE_TYPE_VERSION 2
+#define ESP_MATTER_HUMIDITY_SENSOR_DEVICE_TYPE_ID 0x0307
+#define ESP_MATTER_HUMIDITY_SENSOR_DEVICE_TYPE_VERSION 2
 
 #define ESP_MATTER_FAN_DEVICE_TYPE_ID 0x002B
 #define ESP_MATTER_FAN_DEVICE_TYPE_VERSION 1
@@ -64,6 +72,8 @@
 #define ESP_MATTER_DOOR_LOCK_DEVICE_TYPE_VERSION 2
 #define ESP_MATTER_WINDOW_COVERING_DEVICE_TYPE_ID 0x0202
 #define ESP_MATTER_WINDOW_COVERING_DEVICE_TYPE_VERSION 2
+#define ESP_MATTER_PUMP_DEVICE_TYPE_ID 0x0303
+#define ESP_MATTER_PUMP_DEVICE_TYPE_VERSION 2
 
 namespace esp_matter {
 
@@ -268,7 +278,7 @@ endpoint_t *add(endpoint_t *endpoint);
 
 namespace bridged_node {
 typedef struct config {
-    cluster::bridged_device_basic::config_t bridged_device_basic;
+    cluster::bridged_device_basic_information::config_t bridged_device_basic_information;
 } config_t;
 
 uint32_t get_device_type_id();
@@ -296,6 +306,7 @@ typedef struct config {
     cluster::groups::config_t groups;
     cluster::scenes::config_t scenes;
     cluster::window_covering::config_t window_covering;
+    config(uint8_t end_product_type = 0) : window_covering(end_product_type) {}
 } config_t;
 
 uint32_t get_device_type_id();
@@ -315,6 +326,18 @@ uint8_t get_device_type_version();
 endpoint_t *create(node_t *node, config_t *config, uint8_t flags, void *priv_data);
 endpoint_t *add(endpoint_t *endpoint, config_t *config);
 } /* temperature_sensor */
+
+namespace humidity_sensor {
+typedef struct config {
+    cluster::identify::config_t identify;
+    cluster::relative_humidity_measurement::config_t relative_humidity_measurement;
+} config_t;
+
+uint32_t get_device_type_id();
+uint8_t get_device_type_version();
+endpoint_t *create(node_t *node, config_t *config, uint8_t flags, void *priv_data);
+endpoint_t *add(endpoint_t *endpoint, config_t *config);
+} /* humidity_sensor */
 
 namespace occupancy_sensor {
 typedef struct config {
@@ -339,6 +362,60 @@ uint8_t get_device_type_version();
 endpoint_t *create(node_t *node, config_t *config, uint8_t flags, void *priv_data);
 endpoint_t *add(endpoint_t *endpoint, config_t *config);
 } /* contact_sensor */
+
+namespace light_sensor {
+typedef struct config {
+    cluster::identify::config_t identify;
+    cluster::illuminance_measurement::config_t illuminance_measurement;
+} config_t;
+
+uint32_t get_device_type_id();
+uint8_t get_device_type_version();
+endpoint_t *create(node_t *node, config_t *config, uint8_t flags, void *priv_data);
+endpoint_t *add(endpoint_t *endpoint, config_t *config);
+} /* light_sensor */
+
+namespace pressure_sensor {
+typedef struct config {
+    cluster::identify::config_t identify;
+    cluster::pressure_measurement::config_t pressure_measurement;
+} config_t;
+
+uint32_t get_device_type_id();
+uint8_t get_device_type_version();
+endpoint_t *create(node_t *node, config_t *config, uint8_t flags, void *priv_data);
+endpoint_t *add(endpoint_t *endpoint, config_t *config);
+} /* pressure_sensor */
+
+namespace flow_sensor {
+typedef struct config {
+    cluster::identify::config_t identify;
+    cluster::flow_measurement::config_t flow_measurement;
+} config_t;
+
+uint32_t get_device_type_id();
+uint8_t get_device_type_version();
+endpoint_t *create(node_t *node, config_t *config, uint8_t flags, void *priv_data);
+endpoint_t *add(endpoint_t *endpoint, config_t *config);
+} /* flow_sensor */
+
+namespace pump{
+typedef struct config {
+    cluster::identify::config_t identify;
+    cluster::on_off::config_t on_off;
+    cluster::pump_configuration_and_control::config_t pump_configuration_and_control;
+    config(
+        nullable<int16_t> max_pressure = nullable<int16_t>(),
+        nullable<uint16_t> max_speed = nullable<uint16_t>(),
+        nullable<uint16_t> max_flow = nullable<uint16_t>()
+    ) : pump_configuration_and_control(max_pressure, max_speed, max_flow) {}
+} config_t;
+
+uint32_t get_device_type_id();
+uint8_t get_device_type_version();
+endpoint_t *create(node_t *node, config_t *config, uint8_t flags, void *priv_data);
+endpoint_t *add(endpoint_t *endpoint, config_t *config);
+} /** pump **/
 
 } /* endpoint */
 

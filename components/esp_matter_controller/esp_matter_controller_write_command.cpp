@@ -35,7 +35,7 @@ namespace controller {
 
 template <class T>
 void write_command<T>::on_device_connected_fcn(void *context, ExchangeManager &exchangeMgr,
-                                               SessionHandle &sessionHandle)
+                                               const SessionHandle &sessionHandle)
 {
     write_command<T> *cmd = (write_command<T> *)context;
     CHIP_ERROR err = CHIP_NO_ERROR;
@@ -184,14 +184,14 @@ static esp_err_t write_attribute(uint64_t node_id, uint16_t endpoint_id, uint32_
 
 namespace access_control {
 
-using AccessControl::AuthMode;
-using AccessControl::Privilege;
+using AccessControl::AccessControlEntryAuthModeEnum;
+using AccessControl::AccessControlEntryPrivilegeEnum;
 
 constexpr size_t k_max_acl_entries = CHIP_CONFIG_EXAMPLE_ACCESS_CONTROL_MAX_ENTRIES_PER_FABRIC;
 constexpr size_t k_max_subjects_per_acl = CHIP_CONFIG_EXAMPLE_ACCESS_CONTROL_MAX_SUBJECTS_PER_ENTRY;
 constexpr size_t k_max_targets_per_acl = CHIP_CONFIG_EXAMPLE_ACCESS_CONTROL_MAX_TARGETS_PER_ENTRY;
 
-using acl_obj = AccessControl::Structs::AccessControlEntry::Type;
+using acl_obj = AccessControl::Structs::AccessControlEntryStruct::Type;
 using acl_target_obj = AccessControl::Structs::Target::Type;
 typedef struct acl_attr {
     acl_obj acl_array[k_max_acl_entries];
@@ -220,11 +220,11 @@ static esp_err_t parse_acl_json(char *json_str, acl_attr_t *acl, size_t *acl_siz
         // Privilege
         ESP_RETURN_ON_FALSE(json_obj_get_int(&jctx, "privilege", &int_val) == 0, ESP_ERR_INVALID_ARG, TAG,
                             "Failed to get privilege from the ACL json string");
-        acl->acl_array[acl_index].privilege = Privilege(int_val);
+        acl->acl_array[acl_index].privilege = AccessControlEntryPrivilegeEnum(int_val);
         // AuthMode
         ESP_RETURN_ON_FALSE(json_obj_get_int(&jctx, "authMode", &int_val) == 0, ESP_ERR_INVALID_ARG, TAG,
                             "Failed to get authMode from the ACL json string");
-        acl->acl_array[acl_index].authMode = AuthMode(int_val);
+        acl->acl_array[acl_index].authMode = AccessControlEntryAuthModeEnum(int_val);
         // Subjects
         int subjects_num = 0;
         if (json_obj_get_array(&jctx, "subjects", &subjects_num) == 0 && subjects_num > 0) {
@@ -301,7 +301,7 @@ static esp_err_t parse_acl_json(char *json_str, acl_attr_t *acl, size_t *acl_siz
 constexpr size_t k_max_extension_entries = CHIP_CONFIG_EXAMPLE_ACCESS_CONTROL_MAX_ENTRIES_PER_FABRIC;
 constexpr size_t k_max_extension_data_len = 128;
 
-using extension_obj = AccessControl::Structs::ExtensionEntry::Type;
+using extension_obj = AccessControl::Structs::AccessControlExtensionStruct::Type;
 typedef struct extension_attr {
     extension_obj extension_array[k_max_extension_entries];
     uint8_t data_array[k_max_extension_entries][k_max_extension_data_len];
@@ -465,6 +465,75 @@ static esp_err_t write_attribute(uint64_t node_id, uint16_t endpoint_id, uint32_
 
 } // namespace binding
 
+namespace group_key_management {
+
+using group_key_map_obj = GroupKeyManagement::Structs::GroupKeyMapStruct::Type;
+
+constexpr size_t k_max_group_key_map_size = CHIP_CONFIG_MAX_GROUP_KEYS_PER_FABRIC;
+
+typedef struct group_key_map_attr {
+    group_key_map_obj group_key_map_array[k_max_group_key_map_size];
+} group_key_map_attr_t;
+
+static void group_key_map_attr_free(void *ctx)
+{
+    group_key_map_attr_t *attr_ptr = reinterpret_cast<group_key_map_attr_t *>(ctx);
+    chip::Platform::Delete(attr_ptr);
+}
+
+static esp_err_t parse_group_key_map_json(char *json_str, group_key_map_attr_t *group_key_map,
+                                          size_t *group_key_map_size)
+{
+    jparse_ctx_t jctx;
+    ESP_RETURN_ON_FALSE(json_parse_start(&jctx, json_str, strlen(json_str)) == 0, ESP_ERR_INVALID_ARG, TAG,
+                        "Group key map json string is wrong");
+    size_t index = 0;
+    while (index < k_max_group_key_map_size && json_arr_get_object(&jctx, index) == 0) {
+        int int_val;
+        // Fabric
+        if (json_obj_get_int(&jctx, "fabricIndex", &int_val) == 0) {
+            group_key_map->group_key_map_array[index].fabricIndex = int_val;
+        }
+        ESP_RETURN_ON_FALSE(json_obj_get_int(&jctx, "groupId", &int_val) == 0, ESP_ERR_INVALID_ARG, TAG,
+                            "Failed to get groupId");
+        group_key_map->group_key_map_array[index].groupId = int_val;
+        ESP_RETURN_ON_FALSE(json_obj_get_int(&jctx, "groupKeySetID", &int_val) == 0, ESP_ERR_INVALID_ARG, TAG,
+                            "Failed to get groupKeySetId");
+        group_key_map->group_key_map_array[index].groupKeySetID = int_val;
+        json_arr_leave_object(&jctx);
+        index++;
+    }
+    *group_key_map_size = index;
+    return ESP_OK;
+}
+
+static esp_err_t write_attribute(uint64_t node_id, uint16_t endpoint_id, uint32_t attribute_id, char *attribute_val_str)
+{
+    esp_err_t err = ESP_OK;
+    switch (attribute_id) {
+    case GroupKeyManagement::Attributes::GroupKeyMap::Id: {
+        size_t group_key_map_size = 0;
+        group_key_map_attr_t *attr_val = chip::Platform::New<group_key_map_attr_t>();
+        ESP_RETURN_ON_FALSE(attr_val, ESP_ERR_NO_MEM, TAG, "Failed to alloc group_key_map_attr_t");
+        ESP_RETURN_ON_ERROR(parse_group_key_map_json(attribute_val_str, attr_val, &group_key_map_size), TAG,
+                            "Failed to parse group_key_map json string");
+        List<group_key_map_obj> group_key_map_list(attr_val->group_key_map_array, group_key_map_size);
+        write_command<List<group_key_map_obj>> *cmd = New<write_command<List<group_key_map_obj>>>(
+            node_id, endpoint_id, GroupKeyManagement::Id, attribute_id, group_key_map_list);
+        ESP_RETURN_ON_FALSE(cmd, ESP_ERR_NO_MEM, TAG, "Failed to alloc memory for write_command");
+        cmd->set_attribute_free_handler(group_key_map_attr_free, attr_val);
+        return cmd->send_command();
+        break;
+    }
+    default:
+        err = ESP_ERR_NOT_SUPPORTED;
+        break;
+    }
+    return err;
+}
+
+} // namespace group_key_management
+
 } // namespace clusters
 
 esp_err_t send_write_attr_command(uint64_t node_id, uint16_t endpoint_id, uint32_t cluster_id, uint32_t attribute_id,
@@ -485,6 +554,9 @@ esp_err_t send_write_attr_command(uint64_t node_id, uint16_t endpoint_id, uint32
         break;
     case Binding::Id:
         return clusters::binding::write_attribute(node_id, endpoint_id, attribute_id, attribute_val_str);
+        break;
+    case GroupKeyManagement::Id:
+        return clusters::group_key_management::write_attribute(node_id, endpoint_id, attribute_id, attribute_val_str);
         break;
     default:
         return ESP_ERR_NOT_SUPPORTED;
